@@ -1406,7 +1406,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
       return !!config.textura && !!config.textura_p2;
     }
     if (step === 'Borde de Torta')  return esMontado ? (!!config.ruedo && !!config.ruedo_p2) : !!config.ruedo;
-    if (step === 'Imagen de referencia') return !!(config.pas_img_file);
+    if (step === 'Imagen de referencia') return !!(config.pas_img_file || config.pas_sin_imagen);
     return !!getValorPastel(step);
   };
 
@@ -1415,7 +1415,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
     if (idx < STEPS.length - 1) setTimeout(() => setStepActivo(STEPS[idx + 1]), 160);
   };
 
-  const seleccionarTamano = (tam) => { onChange({ tamano: tam }); avanzarSiguiente('Tamaño de Torta'); };
+  const seleccionarTamano = (tam) => { onChange({ tamano: tam }); avanzarSiguiente('Dimensión de Torta'); };
 
   const seleccionarValorPastel = (step, val) => {
     onChange({ [PASTEL_KEY_MAP[step]]: val });
@@ -1728,7 +1728,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
           );
           return (
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Tabs + buscador */}
+              {/* Tabs de categorías */}
               <Box sx={{ borderBottom: `1px solid ${DL.border}` }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: '12px', gap: '8px' }}>
                   <Box sx={{ display: 'flex', flex: 1, gap: '0', overflowX: 'auto', minWidth: 0, '&::-webkit-scrollbar': { height: 0 }, scrollbarWidth: 'none' }}>
@@ -1742,10 +1742,6 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                       }}>{c}</Box>
                     ))}
                   </Box>
-                  <TextField size="small" placeholder="Buscar..." value={accSearch}
-                    onChange={e => setAccSearch(e.target.value)}
-                    slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 13, color: DL.tS }} /></InputAdornment> } }}
-                    sx={{ width: 140, flexShrink: 0, '& .MuiOutlinedInput-root': { fontSize: 11, borderRadius: '8px', background: '#fff' } }} />
                 </Box>
               </Box>
               {/* Grid de accesorios */}
@@ -2135,7 +2131,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                   }}>
                     <input type="file" accept="image/*" hidden onChange={e => {
                       const file = e.target.files?.[0];
-                      if (file) { const url = URL.createObjectURL(file); onChange({ pas_img_file: file.name, pas_img_url: url }); }
+                      if (file) { const url = URL.createObjectURL(file); onChange({ pas_img_file: file.name, pas_img_url: url, pas_sin_imagen: false }); }
                     }} />
                     {config.pas_img_url ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2355,7 +2351,26 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
             </Box>
           </Box>
         ) : stepActivo === 'Imagen de referencia' ? (
-          <Box sx={{ p: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Box sx={{ p: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Sin imagen (mismo estilo y lugar que "Sin mensaje") */}
+            {!config.pas_img_file && (
+              <Box>
+                <Box onClick={() => {
+                  onChange({ pas_sin_imagen: true });
+                  setTimeout(() => avanzarSiguiente('Imagen de referencia'), 160);
+                }} sx={{
+                  display: 'inline-flex', px: '14px', py: '8px', borderRadius: '4px', cursor: 'pointer',
+                  border: `1.5px solid ${config.pas_sin_imagen ? DL.red : '#fca5a5'}`,
+                  background: config.pas_sin_imagen ? DL.redBg : '#fff5f5',
+                  boxShadow: config.pas_sin_imagen ? '0 0 0 3px rgba(220,38,38,.10)' : 'none',
+                  transition: 'all .13s', '&:hover': { border: `1.5px solid ${DL.red}` },
+                }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 500, color: DL.red, fontFamily: F, whiteSpace: 'nowrap' }}>
+                    Sin imagen
+                  </Typography>
+                </Box>
+              </Box>
+            )}
             <Box sx={{ display: 'inline-flex', alignSelf: 'flex-start', px: '8px', py: '2px', borderRadius: '4px', background: '#fefce8', border: '1px solid #fef08a' }}>
               <Typography sx={{ fontSize: 10, fontWeight: 500, color: '#a16207', fontFamily: F }}>Paso opcional</Typography>
             </Box>
@@ -2383,7 +2398,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
             }}>
               <input type="file" accept="image/*" hidden onChange={e => {
                 const file = e.target.files?.[0];
-                if (file) { const url = URL.createObjectURL(file); onChange({ pas_img_file: file.name, pas_img_url: url }); }
+                if (file) { const url = URL.createObjectURL(file); onChange({ pas_img_file: file.name, pas_img_url: url, pas_sin_imagen: false }); }
               }} />
               {config.pas_img_url ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -2465,17 +2480,6 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                     </Box>
                   );
                 })}
-              </Box>
-            )}
-
-            {/* Sin imagen — continuar igual */}
-            {!config.pas_img_file && (
-              <Box onClick={() => avanzarSiguiente('Imagen de referencia')} sx={{
-                alignSelf: 'flex-start', px: '16px', py: '8px', borderRadius: '8px',
-                background: '#f6f6f6', cursor: 'pointer',
-                '&:hover': { background: '#e3e3e3' }, transition: 'background .13s',
-              }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 500, color: DL.tM, fontFamily: F }}>Continuar sin imagen →</Typography>
               </Box>
             )}
 
@@ -4080,7 +4084,7 @@ export default function NuevoPedido({ user }) {
       {/* Content — ambas tarjetas miden lo mismo y llenan la vista; el resumen scrollea por dentro */}
       <Box sx={{ display: 'flex', gap: '20px', alignItems: 'stretch', minHeight: 'calc(100vh - 200px)' }}>
         {/* Main content */}
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', ...(step === 3 ? { '& > *': { flexGrow: 1 } } : {}) }}>
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', ...(step === 3 ? { alignSelf: 'flex-start' } : {}) }}>
           {step === 1 && <Step1 data={formData} onChange={update} isEditing={!!editId} showErrors={showErrors} />}
           {step === 2 && <Step3 data={formData} onChange={update}
             direccionesCliente={clienteDirecciones}

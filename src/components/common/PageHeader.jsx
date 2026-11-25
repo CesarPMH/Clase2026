@@ -14,7 +14,7 @@ import {
 import { DL } from '../../theme';
 
 // Reusable MUI-styled mini Select
-export function MiniSelect({ label, value, onChange, options, minWidth = 110 }) {
+export function MiniSelect({ label, value, onChange, options, minWidth = 110, compact = false }) {
   return (
     <Box sx={{
       position: 'relative',
@@ -22,8 +22,8 @@ export function MiniSelect({ label, value, onChange, options, minWidth = 110 }) 
       flexDirection: 'column',
     }}>
       <Typography sx={{
-        position: 'absolute', top: -7, left: 10, zIndex: 1,
-        fontSize: 9, fontWeight: 500, textTransform: 'uppercase',
+        position: 'absolute', top: compact ? -6 : -7, left: compact ? 8 : 10, zIndex: 1,
+        fontSize: compact ? 8 : 9, fontWeight: 500, textTransform: 'uppercase',
         letterSpacing: '0.07em', color: DL.tS,
         background: '#fff', px: '4px',
         whiteSpace: 'nowrap', pointerEvents: 'none',
@@ -40,7 +40,7 @@ export function MiniSelect({ label, value, onChange, options, minWidth = 110 }) 
           background: '#fff',
           border: `1px solid ${DL.border2}`,
           borderRadius: '7px',
-          padding: '7px 28px 7px 10px',
+          padding: compact ? '4px 22px 4px 8px' : '7px 28px 7px 10px',
           outline: 'none', cursor: 'pointer',
           appearance: 'none',
           minWidth,
@@ -54,7 +54,7 @@ export function MiniSelect({ label, value, onChange, options, minWidth = 110 }) 
       </Box>
       {/* Custom chevron */}
       <Box sx={{
-        position: 'absolute', right: 8, top: '50%',
+        position: 'absolute', right: compact ? 6 : 8, top: '50%',
         transform: 'translateY(-50%)',
         pointerEvents: 'none', color: DL.tS,
         fontSize: 10,

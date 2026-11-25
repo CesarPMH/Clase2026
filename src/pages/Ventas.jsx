@@ -181,25 +181,11 @@ function HistoricoCard({ gran, setGran, split, setSplit }) {
         <Typography sx={{ fontSize:13, fontWeight: 500, color:DL.tH }}>{t('sec.ventasHistoricas')}</Typography>
         <Box sx={{ display:'flex', alignItems:'center', gap:'14px' }}>
           {/* VISTA */}
-          <Box sx={{ display:'flex', alignItems:'center', gap:'5px' }}>
-            <Typography sx={{ fontSize:8, fontWeight: 500, color:DL.tS, textTransform:'uppercase', letterSpacing:'0.06em' }}>
-              {t('view.vista')}
-            </Typography>
-            <Box component="select" value={gran} onChange={e => setGran(e.target.value)} sx={selectSx}>
-              <option value="mes">{t('time.mes')}</option>
-              <option value="trim">{t('time.trimestral')}</option>
-            </Box>
-          </Box>
+          <MiniSelect compact label={t('view.vista')} value={gran} onChange={setGran} minWidth={96}
+            options={[{ value: 'mes', label: t('time.mes') }, { value: 'trim', label: t('time.trimestral') }]} />
           {/* SPLIT BY */}
-          <Box sx={{ display:'flex', alignItems:'center', gap:'5px' }}>
-            <Typography sx={{ fontSize:8, fontWeight: 500, color:DL.tS, textTransform:'uppercase', letterSpacing:'0.06em' }}>
-              {t('view.splitBy')}
-            </Typography>
-            <Box component="select" value={split} onChange={e => setSplit(e.target.value)} sx={selectSx}>
-              <option value="general">{t('time.mes')}</option>
-              <option value="categoria">{t('filter.categoria')}</option>
-            </Box>
-          </Box>
+          <MiniSelect compact label={t('view.splitBy')} value={split} onChange={setSplit} minWidth={96}
+            options={[{ value: 'general', label: t('time.mes') }, { value: 'categoria', label: t('filter.categoria') }]} />
           {/* $ / Cant. toggle */}
           <Box sx={{ display:'flex', alignItems:'center', gap:'5px' }}>
             <Typography sx={{ fontSize:9, fontWeight: 500, color: valMode === '$' ? DL.navy : DL.tS, transition:'color .15s' }}>$</Typography>

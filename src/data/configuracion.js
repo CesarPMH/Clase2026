@@ -55,17 +55,19 @@ export function nuevoIdCliente(list) { return list.reduce((m, c) => Math.max(m, 
 // ─── Usuarios ─────────────────────────────────────────────────────────────────
 export const ROLES = ['Administrador', 'Vendedor', 'Producción'];
 const SEED_USUARIOS = [
-  { id: 1, nombre: 'Administrador General', email: 'admin@puntocero.com', rol: 'Administrador', sucursal: 'Matriz', creado: '2026-01-12' },
-  { id: 2, nombre: 'Andrea M.', email: 'andrea@puntocero.com', rol: 'Vendedor', sucursal: 'Sucursal Centro', creado: '2026-02-03' },
-  { id: 3, nombre: 'Christian B.', email: 'christian@puntocero.com', rol: 'Vendedor', sucursal: 'Sucursal Norte', creado: '2026-02-03' },
-  { id: 4, nombre: 'Mariana V.', email: 'mariana@puntocero.com', rol: 'Vendedor', sucursal: 'Sucursal Sur', creado: '2026-03-18' },
-  { id: 5, nombre: 'Jefe de Producción', email: 'produccion@puntocero.com', rol: 'Producción', sucursal: 'Matriz', creado: '2026-01-20' },
+  { id: 1, nombre: 'Administrador General', email: 'admin@puntocero.com', password: 'admin123', rol: 'Administrador', sucursal: 'Matriz', creado: '2026-01-12' },
+  { id: 2, nombre: 'Andrea M.', email: 'andrea@puntocero.com', password: 'andrea123', rol: 'Vendedor', sucursal: 'Sucursal Centro', creado: '2026-02-03' },
+  { id: 3, nombre: 'Christian B.', email: 'christian@puntocero.com', password: 'christian123', rol: 'Vendedor', sucursal: 'Sucursal Norte', creado: '2026-02-03' },
+  { id: 4, nombre: 'Mariana V.', email: 'mariana@puntocero.com', password: 'mariana123', rol: 'Vendedor', sucursal: 'Sucursal Sur', creado: '2026-03-18' },
+  { id: 5, nombre: 'Jefe de Producción', email: 'produccion@puntocero.com', password: 'produccion123', rol: 'Producción', sucursal: 'Matriz', creado: '2026-01-20' },
 ];
 export const SUCURSALES = ['Matriz', 'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur'];
 
 export function getUsuarios() {
   let list = read(K_USR, null);
   if (!list) { list = SEED_USUARIOS; write(K_USR, list); }
+  // Usuarios guardados antes de existir la contraseña de ejemplo
+  if (list.some(u => !u.password)) { list = list.map(u => (u.password ? u : { ...u, password: 'demo1234' })); write(K_USR, list); }
   return list;
 }
 export function saveUsuarios(list) { write(K_USR, list); return list; }

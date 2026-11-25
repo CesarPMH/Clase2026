@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import theme from './theme';
@@ -9,20 +10,32 @@ import NuevoPedido from './pages/NuevoPedido';
 import PedidosDia from './pages/PedidosDia';
 import Ventas from './pages/Ventas';
 import SolicitudesCambio from './pages/SolicitudesCambio';
+import Login from './pages/Login';
 import ConfigClientes from './pages/ConfigClientes';
 import ConfigUsuarios from './pages/ConfigUsuarios';
 import ConfigProductos from './pages/ConfigProductos';
 import './data/configuracion'; // sincroniza clientes y productos activos con "Pedido Nuevo"
 
-const DEFAULT_USER = { id:'demo', email:'demo@puntocero.com', name:'Demo User', initials:'PC', role:'Admin', isAdmin:true, active:true, lang:'es', permissions:{} };
+const DEFAULT_USER = { id:'demo', email:'user123@gmail.com', name:'Demo User', initials:'PC', role:'Admin', isAdmin:true, active:true, lang:'es', permissions:{} };
 
 function AppInner() {
   const { applyLang } = useT();
   applyLang('es');
+  const [sesion, setSesion] = useState(() => {
+    try { return localStorage.getItem('pc_sesion') === '1'; } catch { return false; }
+  });
+  const entrar = () => { try { localStorage.setItem('pc_sesion', '1'); } catch { /* sin almacenamiento */ } setSesion(true); };
+  const salir = () => {
+    try { localStorage.removeItem('pc_sesion'); } catch { /* sin almacenamiento */ }
+    window.history.replaceState({}, '', '/');
+    setSesion(false);
+  };
+
+  if (!sesion) return <Login onLogin={entrar} />;
 
   return (
     <BrowserRouter>
-      <AppLayout user={DEFAULT_USER} onLogout={() => {}}>
+      <AppLayout user={DEFAULT_USER} onLogout={salir}>
         <Routes>
           <Route path="/" element={<Home user={DEFAULT_USER} />} />
           <Route path="/pedidos" element={<Pedidos />} />

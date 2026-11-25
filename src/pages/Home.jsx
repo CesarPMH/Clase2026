@@ -55,6 +55,14 @@ function Enlace({ children, onClick }) {
   );
 }
 
+function ListaConBorde({ children }) {
+  return (
+    <Box sx={{ m: '12px', border: `1px solid ${DL.border}`, borderRadius: '8px', maxHeight: 462, overflowY: 'auto' }}>
+      {children}
+    </Box>
+  );
+}
+
 function FilaEntrega({ p, fechaCorta, onClick }) {
   return (
     <Box onClick={onClick} sx={{
@@ -198,16 +206,15 @@ export default function Home({ user }) {
           <Tarjeta titulo={`Entregas de ${nombreDia} (${delDia.length})`} extra={<Enlace onClick={() => navigate(`/pedidos/dia/${sel.iso}`)}>Ver el día</Enlace>}>
             {delDia.length === 0
               ? <Typography sx={{ p: '30px 18px', fontSize: 12, color: DL.tS, fontFamily: F, textAlign: 'center' }}>No hay entregas programadas para este día.</Typography>
-              : delDia.slice(0, 6).map(p => <FilaEntrega key={p.id} p={p} onClick={() => navigate(`/pedidos/dia/${p.entrega.slice(0, 10)}`)} />)}
-            {delDia.length > 6 && <Box sx={{ px: '18px', py: '10px', borderTop: `1px solid ${DL.border}` }}><Enlace onClick={() => navigate(`/pedidos/dia/${sel.iso}`)}>Ver las {delDia.length - 6} entregas restantes</Enlace></Box>}
+              : <ListaConBorde>{delDia.map(p => <FilaEntrega key={p.id} p={p} onClick={() => navigate(`/pedidos/dia/${p.entrega.slice(0, 10)}`)} />)}</ListaConBorde>}
           </Tarjeta>
           <Tarjeta titulo="Siguientes entregas de la semana" extra={<Enlace onClick={() => navigate('/pedidos?vista=gestion')}>Ver gestión</Enlace>}>
             {siguientes.length === 0
               ? <Typography sx={{ p: '30px 18px', fontSize: 12, color: DL.tS, fontFamily: F, textAlign: 'center' }}>No hay más entregas después de este día.</Typography>
-              : siguientes.slice(0, 6).map(p => {
+              : <ListaConBorde>{siguientes.map(p => {
                 const e = new Date(p.entrega);
                 return <FilaEntrega key={p.id} p={p} fechaCorta={`${DIAS[e.getDay()]} ${e.getDate()}`} onClick={() => navigate(`/pedidos/dia/${p.entrega.slice(0, 10)}`)} />;
-              })}
+              })}</ListaConBorde>}
           </Tarjeta>
         </Box>
 

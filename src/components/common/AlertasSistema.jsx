@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { DL } from '../../theme';
+import { MiniSelect } from './PageHeader';
 
 const FF = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
@@ -54,17 +55,8 @@ export default function AlertasSistema({ alerts = [], title = 'Alertas de Sistem
         <Typography sx={{ fontSize: 13, fontWeight: 500, color: DL.tH, fontFamily: FF }}>
           {title}
         </Typography>
-        <Box
-          component="select"
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          sx={selectSx}
-        >
-          <option value="todos">Todos</option>
-          <option value="r">Críticas</option>
-          <option value="y">Atención</option>
-          <option value="g">Positivas</option>
-        </Box>
+        <MiniSelect compact label="Mostrar" value={filter} onChange={setFilter} minWidth={92}
+          options={[{ value: 'todos', label: 'Todos' }, { value: 'r', label: 'Críticas' }, { value: 'y', label: 'Atención' }, { value: 'g', label: 'Positivas' }]} />
       </Box>
 
       {/* Rows */}

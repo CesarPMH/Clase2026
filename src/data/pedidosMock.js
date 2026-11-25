@@ -953,6 +953,7 @@ export const PASTEL_DEDICATORIA_TIPOS = [
 ];
 
 export const PASTEL_STEPS = [
+  'Imagen de referencia',
   'Dimensión de Torta',
   'Estilo de Relleno',
   'Sabor de Torta',
@@ -961,7 +962,6 @@ export const PASTEL_STEPS = [
   'Textura y Color',
   'Borde de Torta',
   'Dedicatoria',
-  'Imagen de referencia',
   'Accesorios',
 ];
 

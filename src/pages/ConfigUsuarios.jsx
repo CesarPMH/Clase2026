@@ -2,13 +2,13 @@
 // Se pueden agregar, editar y quitar usuarios del sistema.
 import { useState, useMemo } from 'react';
 import { Box, Typography, TextField, InputAdornment } from '@mui/material';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, Visibility as VerIcon, VisibilityOff as NoVerIcon } from '@mui/icons-material';
 import { DL } from '../theme';
 import PageHeader, { MiniSelect } from '../components/common/PageHeader';
 import { getUsuarios, saveUsuarios, nuevoIdUsuario, ROLES, SUCURSALES } from '../data/configuracion';
 import { BotonIcono, IconoMas, MenuAcciones, ConfigShell, F, th, td, BtnOutline, Card, TableWrap, Etiqueta, Campo, inputSx, Dialogo, Confirmar } from '../components/common/ConfigUI';
 
-const VACIO = { nombre: '', email: '', rol: 'Vendedor', sucursal: SUCURSALES[1] };
+const VACIO = { nombre: '', email: '', password: '', rol: 'Vendedor', sucursal: SUCURSALES[1] };
 const colorRol = (r) => (r === 'Administrador' ? DL.navy : r === 'Producción' ? DL.yellow : DL.tM);
 
 export default function ConfigUsuarios() {
@@ -20,14 +20,15 @@ export default function ConfigUsuarios() {
   const [errores, setErrores] = useState({});
   const [borrar, setBorrar] = useState(null);
   const [aviso, setAviso] = useState('');
+  const [verPass, setVerPass] = useState(true);
 
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     return lista.filter(u => (!rol || u.rol === rol) && (!q || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
   }, [lista, search, rol]);
 
-  const abrirNuevo = () => { setEditId(null); setForm({ ...VACIO }); setErrores({}); };
-  const abrirEditar = (u) => { setEditId(u.id); setForm({ nombre: u.nombre, email: u.email, rol: u.rol, sucursal: u.sucursal }); setErrores({}); };
+  const abrirNuevo = () => { setEditId(null); setForm({ ...VACIO }); setErrores({}); setVerPass(true); };
+  const abrirEditar = (u) => { setEditId(u.id); setForm({ nombre: u.nombre, email: u.email, password: u.password || '', rol: u.rol, sucursal: u.sucursal }); setErrores({}); setVerPass(true); };
   const set = (p) => setForm(f => ({ ...f, ...p }));
 
   const admins = lista.filter(u => u.rol === 'Administrador').length;
@@ -39,11 +40,13 @@ export default function ConfigUsuarios() {
     if (!form.email.trim()) e.email = 'El correo es obligatorio.';
     else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) e.email = 'Correo no válido.';
     else if (lista.some(u => u.id !== editId && u.email.toLowerCase() === form.email.trim().toLowerCase())) e.email = 'Ya existe un usuario con este correo.';
+    if (!form.password) e.password = 'La contraseña es obligatoria.';
+    else if (form.password.length < 6) e.password = 'Debe tener al menos 6 caracteres.';
     const actual = lista.find(u => u.id === editId);
     if (actual && esUltimoAdmin(actual) && form.rol !== 'Administrador') e.rol = 'Debe quedar al menos un administrador.';
     setErrores(e);
     if (Object.keys(e).length) return;
-    const u = { id: editId ?? nuevoIdUsuario(lista), nombre: form.nombre.trim(), email: form.email.trim(), rol: form.rol, sucursal: form.sucursal, creado: actual?.creado || new Date().toISOString().slice(0, 10) };
+    const u = { id: editId ?? nuevoIdUsuario(lista), nombre: form.nombre.trim(), email: form.email.trim(), password: form.password, rol: form.rol, sucursal: form.sucursal, creado: actual?.creado || new Date().toISOString().slice(0, 10) };
     setLista(saveUsuarios(editId == null ? [...lista, u] : lista.map(x => (x.id === editId ? u : x))));
     setForm(null);
   };
@@ -112,6 +115,17 @@ export default function ConfigUsuarios() {
             </Campo>
             <Campo label="Correo" requerido error={errores.email}>
               <Box component="input" value={form.email} onChange={e => set({ email: e.target.value })} placeholder="nombre@puntocero.com" sx={inputSx(errores.email)} />
+            </Campo>
+            <Campo label="Contraseña" requerido error={errores.password}>
+              <Box sx={{ position: 'relative' }}>
+                <Box component="input" type={verPass ? 'text' : 'password'} value={form.password} onChange={e => set({ password: e.target.value })}
+                  placeholder="Mínimo 6 caracteres" sx={{ ...inputSx(errores.password), pr: '42px' }} />
+                <Box component="button" type="button" onClick={() => setVerPass(v => !v)} aria-label={verPass ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  sx={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', color: DL.tS, display: 'flex', p: 0, '&:hover': { color: DL.tH } }}>
+                  {verPass ? <NoVerIcon sx={{ fontSize: 18 }} /> : <VerIcon sx={{ fontSize: 18 }} />}
+                </Box>
+              </Box>
+              <Typography sx={{ fontSize: 10, color: DL.tS, fontFamily: F, mt: '4px' }}>Contraseña de ejemplo: el prototipo no tiene base de datos y no guarda nada en ningún servidor.</Typography>
             </Campo>
             <Box sx={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <Campo label="Rol" error={errores.rol} flex="1 1 160px">
