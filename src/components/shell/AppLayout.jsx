@@ -49,14 +49,14 @@ export default function AppLayout({ user, onLogout, children }) {
         height: 'calc(100vh - 45px)',
         overflowY: 'auto',
         overflowX: 'hidden',
-        background: "#ffffff",
+        background: DL.bg,
         flex: 1,
         minWidth: 0,
         scrollbarWidth: 'thin',
         scrollbarColor: '#d4d4d4 transparent',
         '&::-webkit-scrollbar':       { width: 4 },
         '&::-webkit-scrollbar-thumb': { background: '#d4d4d4', borderRadius: 4 },
-        pb: '28px',
+        pb: 0,
       }}>
         {children}
       </Box>
