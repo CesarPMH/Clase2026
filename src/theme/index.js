@@ -1,6 +1,10 @@
 import { createTheme } from '@mui/material/styles';
 
 // ─── Punto Cero — editorial manuscript palette (ver DESIGN-2.md) ─────────────
+// Objetivo: centralizar la identidad visual de la app para no repetir colores y tipografías en
+// cada pantalla. Este archivo exporta dos cosas: la paleta "DL" (la usan los componentes directo
+// en sus estilos sx) y el tema de MUI por defecto, que App.jsx aplica con ThemeProvider.
+//
 // Se conservan los nombres de las claves (DL.blue, DL.navy…) para no tocar
 // cada pantalla; los valores ahora son el sistema monocromo con un solo acento sage.
 export const DL = {
@@ -35,12 +39,18 @@ export const DL = {
   e3: 'rgba(0,0,0,.06) 0px 2px 6px 0px, rgba(0,0,0,.03) 0px 10px 6px 0px',
 };
 
+// Familias tipográficas: Inter (sans) para texto y Crimson Pro (serif) para títulos y cifras destacadas.
 export const FONT_SANS  = "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif";
 export const FONT_SERIF = "'Crimson Pro', 'Cormorant Garamond', Georgia, serif";
 
+// Estilo base de los títulos h1-h6 (serif ligera); se reutiliza para que todos sean iguales.
 const heading = { fontFamily: FONT_SERIF, fontWeight: 300, letterSpacing: 'normal', lineHeight: 1 };
 
+// Tema de MUI: aquí se sobrescriben los valores por defecto de los componentes para que
+// coincidan con el diseño de Punto Cero (paleta, tipografía, bordes y sombras), en vez de
+// repetir esos estilos en cada pantalla.
 const theme = createTheme({
+  // Paleta de MUI construida con los colores de DL (principal negro tinta, secundario verde salvia, y colores de estado).
   palette: {
     primary:   { main: '#1a1a1a', dark: '#000000', contrastText: '#fff' },
     secondary: { main: DL.blue,   dark: '#46695a', contrastText: '#fff' },
@@ -55,6 +65,7 @@ const theme = createTheme({
       disabled:  '#8d8d8d',
     },
   },
+  // Tipografía: texto en sans y títulos en serif; los botones sin mayúsculas forzadas.
   typography: {
     fontFamily: FONT_SANS,
     h1: heading,
@@ -76,7 +87,9 @@ const theme = createTheme({
     },
     button: { fontWeight: 500, letterSpacing: 0, textTransform: 'none' },
   },
+  // Radio de borde general de los componentes.
   shape: { borderRadius: 8 },
+  // Sombras: se reducen a niveles muy suaves para el estilo plano y limpio del diseño.
   shadows: [
     'none',
     DL.e1, DL.e1, DL.e2, DL.e2, DL.e2,
@@ -85,6 +98,7 @@ const theme = createTheme({
     DL.e3, DL.e3, DL.e3, DL.e3, DL.e3,
     DL.e3, DL.e3, DL.e3, DL.e3,
   ],
+  // Ajustes por componente de MUI (botones, chips, tablas, tooltips, etc.).
   components: {
     MuiCssBaseline: {
       styleOverrides: `
@@ -206,4 +220,5 @@ const theme = createTheme({
   },
 });
 
+// Se exporta el tema para pasarlo a ThemeProvider en App.jsx.
 export default theme;

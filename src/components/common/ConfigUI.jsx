@@ -1,16 +1,23 @@
 // Piezas compartidas de las vistas de Configuración
+// Objetivo: reunir en un solo archivo los componentes visuales que repiten las tres pantallas de
+// Configuración (Clientes, Usuarios y Productos): tabla, botones, diálogos, campos, etiquetas
+// y el menú lateral. Así las pantallas se ven iguales y cada una solo se ocupa de su lógica.
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Dialog, DialogContent, IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
 import { Add as AddIcon, MoreVert as MoreVertIcon, PeopleAltOutlined as PeopleIcon, BadgeOutlined as BadgeIcon, CategoryOutlined as CategoryIcon } from '@mui/icons-material';
 import { DL } from '../../theme';
 
+// Tipografías de la marca: Inter para texto y Crimson Pro (serif) para títulos.
 export const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 export const SERIF = "'Crimson Pro','Cormorant Garamond',Georgia,serif";
 
+// Estilos compartidos de las celdas de la tabla: th para el encabezado y td para el cuerpo.
 export const th = { textAlign: 'left', fontFamily: F, fontSize: 11, fontWeight: 500, color: DL.tH, padding: '10px 12px', borderBottom: `1px solid ${DL.tH}`, whiteSpace: 'nowrap', background: 'transparent' };
 export const td = { fontFamily: F, fontSize: 11, color: DL.tM, padding: '12px', borderBottom: `1px dotted ${DL.border2}`, verticalAlign: 'middle' };
 
+// BtnOutline: botón con borde de color (o relleno si filled).
+// Recibe children (texto), onClick, color, disabled y filled. Si está disabled no ejecuta onClick.
 export function BtnOutline({ children, onClick, color = DL.tH, disabled, filled }) {
   return (
     <Box onClick={disabled ? undefined : onClick} sx={{
@@ -23,10 +30,13 @@ export function BtnOutline({ children, onClick, color = DL.tH, disabled, filled 
   );
 }
 
+// Card: tarjeta blanca con borde que agrupa cada bloque de contenido de la pantalla.
 export function Card({ children }) {
   return <Box sx={{ background: '#fff', borderRadius: '12px', border: `1px solid ${DL.border}`, overflow: 'hidden' }}>{children}</Box>;
 }
 
+// Tabs: pestañas para filtrar por categoría.
+// Recibe tabs [{id, label, count?}], value (pestaña activa) y onChange(id).
 export function Tabs({ tabs, value, onChange }) {
   return (
     <Box sx={{ display: 'flex', borderBottom: `1px solid ${DL.border}`, px: '8px', pt: '4px', overflowX: 'auto' }}>
@@ -44,6 +54,8 @@ export function Tabs({ tabs, value, onChange }) {
   );
 }
 
+// TableWrap: contenedor de la tabla con scroll horizontal, para que no se rompa en pantallas
+// angostas. minWidth fija el ancho mínimo antes de que aparezca el scroll.
 export function TableWrap({ children, minWidth = 800 }) {
   return (
     <Box sx={{ p: '12px' }}>
@@ -54,6 +66,8 @@ export function TableWrap({ children, minWidth = 800 }) {
   );
 }
 
+// Interruptor: switch de encendido/apagado (activo/inactivo).
+// Recibe activo (booleano), onChange(nuevoValor) y disabled. Pasa a onChange el valor contrario al actual.
 export function Interruptor({ activo, onChange, disabled }) {
   return (
     <Box onClick={disabled ? undefined : () => onChange(!activo)} role="switch" aria-checked={activo} sx={{
@@ -65,6 +79,7 @@ export function Interruptor({ activo, onChange, disabled }) {
   );
 }
 
+// Etiqueta: pastilla pequeña con borde para mostrar un estado o categoría (rol, tipo de cliente, origen).
 export function Etiqueta({ children, color = DL.tM }) {
   return (
     <Box sx={{ display: 'inline-block', px: '8px', py: '2px', borderRadius: '10px', border: `1px solid ${color}`, }}>
@@ -73,6 +88,8 @@ export function Etiqueta({ children, color = DL.tM }) {
   );
 }
 
+// Campo: envuelve un control de formulario con su etiqueta, un asterisco si es requerido
+// y el mensaje de error debajo cuando existe.
 export function Campo({ label, requerido, error, children, flex }) {
   return (
     <Box sx={{ flex: flex ?? 'unset', minWidth: 0 }}>
@@ -85,11 +102,16 @@ export function Campo({ label, requerido, error, children, flex }) {
   );
 }
 
+// inputSx: estilo común de los inputs y selects de los formularios.
+// Recibe el error del campo (si hay, el borde se pinta en rojo) y devuelve el objeto sx de MUI.
 export const inputSx = (error) => ({
   width: '100%', boxSizing: 'border-box', fontFamily: F, fontSize: 12, color: DL.tH, p: '9px 11px', borderRadius: '8px', background: '#fff',
   border: `1px solid ${error ? DL.red : DL.border2}`, outline: 'none', '&:focus': { borderColor: DL.tH },
 });
 
+// Dialogo: ventana modal con encabezado (título, subtítulo e ícono opcional), contenido y un pie
+// con las acciones (botones). Recibe abierto, onCerrar, titulo, subtitulo, children, acciones,
+// ancho e icono. Se cierra con la X o al hacer clic fuera.
 export function Dialogo({ abierto, onCerrar, titulo, subtitulo, children, acciones, ancho = 'sm', icono }) {
   return (
     <Dialog open={abierto} onClose={onCerrar} maxWidth={ancho} fullWidth
@@ -120,7 +142,8 @@ export function Dialogo({ abierto, onCerrar, titulo, subtitulo, children, accion
   );
 }
 
-// Título de sección dentro de un formulario
+// Seccion: título con línea divisoria para separar partes de un formulario largo.
+// "extra" permite poner un botón a la derecha del título (por ejemplo "Agregar dirección").
 export function Seccion({ titulo, extra, children }) {
   return (
     <Box>
@@ -134,7 +157,8 @@ export function Seccion({ titulo, extra, children }) {
   );
 }
 
-// Selector de dos o más opciones tipo botones
+// Segmentado: selector de una opción entre varias, con apariencia de botones pegados
+// (ej. Natural / Jurídico). Recibe opciones (lista de textos), valor (la elegida) y onChange(opcion).
 export function Segmentado({ opciones, valor, onChange }) {
   return (
     <Box sx={{ display: 'inline-flex', p: '3px', borderRadius: '10px', background: '#f0f0ee', gap: '2px' }}>
@@ -153,6 +177,8 @@ export function Segmentado({ opciones, valor, onChange }) {
   );
 }
 
+// Confirmar: diálogo de sí/no reutilizable para acciones destructivas (eliminar, quitar).
+// Recibe abierto, titulo, texto, textoBoton, onCerrar y onConfirmar.
 export function Confirmar({ abierto, titulo, texto, textoBoton = 'Eliminar', onCerrar, onConfirmar }) {
   return (
     <Dialogo abierto={abierto} onCerrar={onCerrar} titulo={titulo} subtitulo={texto}
@@ -163,6 +189,7 @@ export function Confirmar({ abierto, titulo, texto, textoBoton = 'Eliminar', onC
   );
 }
 
+// Aviso: franja informativa gris dentro de una tarjeta (por ejemplo, el aviso de que los productos vienen de SAP).
 export function Aviso({ children }) {
   return (
     <Box sx={{ px: '16px', py: '10px', background: '#f7f7f4', borderBottom: `1px solid ${DL.border}` }}>
@@ -171,13 +198,15 @@ export function Aviso({ children }) {
   );
 }
 
-// Menú lateral secundario de la sección Configuración (a la derecha del menú principal)
+// Menú lateral secundario de Configuración (a la derecha del menú principal).
+// CONFIG_ITEMS lista sus opciones: ruta, texto e ícono. Para agregar otra sección basta sumar un elemento.
 const CONFIG_ITEMS = [
   { path: '/configuracion/clientes', label: 'Clientes', icon: <PeopleIcon sx={{ fontSize: 16 }} /> },
   { path: '/configuracion/usuarios', label: 'Usuarios', icon: <BadgeIcon sx={{ fontSize: 16 }} /> },
   { path: '/configuracion/productos', label: 'Productos', icon: <CategoryIcon sx={{ fontSize: 16 }} /> },
 ];
 
+// ConfigSideMenu: resalta la opción que coincide con la URL actual; en pantallas chicas pasa a ser una barra horizontal.
 export function ConfigSideMenu() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -206,7 +235,8 @@ export function ConfigSideMenu() {
   );
 }
 
-// Envuelve cada vista de Configuración: menú secundario + contenido
+// ConfigShell: estructura común de cada pantalla de Configuración (menú secundario a la izquierda
+// y el contenido de la pantalla a la derecha). Recibe children.
 export function ConfigShell({ children }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, height: '100%', overflow: 'hidden' }}>
@@ -216,14 +246,19 @@ export function ConfigShell({ children }) {
   );
 }
 
-// Botón de tres puntos: abre las acciones de la fila.
+// MenuAcciones: menú de tres puntos con las acciones de una fila de la tabla.
+// Recibe "opciones"; cada una puede llevar "oculto" para omitirla y "separadorAntes" para
+// dibujar una línea que separe las acciones peligrosas (eliminar, quitar).
+// Formato de cada opción:
 // opciones: [{ label, onClick, color?, separadorAntes?, oculto? }]
 export function MenuAcciones({ opciones }) {
   const [anchor, setAnchor] = useState(null);
   const cerrar = () => setAnchor(null);
+  // Se descartan las opciones marcadas como ocultas antes de dibujar el menú.
   const visibles = opciones.filter(o => !o.oculto);
   return (
     <>
+      {/* stopPropagation evita que el clic en los tres puntos también active la fila que lo contiene. */}
       <IconButton size="small" onClick={e => { e.stopPropagation(); setAnchor(e.currentTarget); }} aria-label="Acciones"
         sx={{ color: DL.tS, '&:hover': { color: DL.tH, background: 'rgba(26,26,26,.06)' } }}>
         <MoreVertIcon sx={{ fontSize: 16 }} />
@@ -245,7 +280,8 @@ export function MenuAcciones({ opciones }) {
   );
 }
 
-// Botón cuadrado solo con ícono (la palabra aparece como ayuda al pasar el cursor)
+// BotonIcono: botón cuadrado solo con ícono. El texto "titulo" sirve de etiqueta accesible
+// y de ayuda al pasar el cursor. Recibe icono, titulo, onClick, filled, color y disabled.
 export function BotonIcono({ icono, titulo, onClick, filled, color = DL.tH, disabled }) {
   return (
     <Tooltip title={titulo} arrow>
@@ -259,4 +295,5 @@ export function BotonIcono({ icono, titulo, onClick, filled, color = DL.tH, disa
     </Tooltip>
   );
 }
+// Ícono "+" ya listo, para los botones de agregar.
 export const IconoMas = <AddIcon sx={{ fontSize: 18 }} />;

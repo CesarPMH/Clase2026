@@ -1,17 +1,26 @@
 // ─── Inicio de sesión de Punto Cero ─────────────────────────────────────────────
 // Acceso de demostración: un único usuario. Las credenciales están en el código del
 // front-end (no hay servidor), por lo que sirven solo como puerta del prototipo.
+// Se relaciona con App.jsx: Login solo valida y avisa con onLogin(); App es quien guarda
+// la sesión en localStorage (clave "pc_sesion") y cambia a la vista del sistema.
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 
+// Credenciales válidas del prototipo (se exportan por si otra pantalla las necesita).
+// Son fijas y visibles en el código porque no hay servidor que las verifique.
 export const USUARIO_DEMO = { email: 'user123@gmail.com', password: 'puntocero123' };
 
+// Constantes de diseño (tipografías y colores) para mantener el estilo de la marca en toda la pantalla.
 const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 const SERIF = "'Crimson Pro', Georgia, serif";
 const INK = '#1a1a1a';
 const SAGE = '#547e69';
 
+// Campo: caja de texto con etiqueta, reutilizada para correo y contraseña.
+// Recibe: label, type, value/onChange (valor controlado), placeholder, autoComplete,
+// error (true pinta el borde rojo) y extra (elemento opcional a la derecha, como el ojo).
+// Devuelve el campo ya con estilos.
 function Campo({ label, type, value, onChange, placeholder, autoComplete, error, extra }) {
   return (
     <Box sx={{ mb: '18px' }}>
@@ -30,13 +39,22 @@ function Campo({ label, type, value, onChange, placeholder, autoComplete, error,
   );
 }
 
+// Login: pantalla de inicio de sesión (puerta de entrada al sistema).
+// Recibe onLogin, función que App ejecuta para abrir la sesión.
+// Muestra un panel de marca (solo en pantallas grandes) y el formulario.
 export default function Login({ onLogin }) {
+  // Estados del formulario: lo escrito en correo y contraseña, si se ve la contraseña
+  // (ojo) y el mensaje de error.
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [ver, setVer] = useState(false);
   const [error, setError] = useState('');
 
+  // enviar: se ejecuta al enviar el formulario. Compara con USUARIO_DEMO; el correo se
+  // limpia (espacios y mayúsculas) y la contraseña se compara tal cual. Si coincide llama a
+  // onLogin; si no, muestra el error y vacía la contraseña para que se escriba de nuevo.
   const enviar = (e) => {
+    // Evita que el navegador recargue la página al enviar el formulario.
     e.preventDefault();
     if (email.trim().toLowerCase() === USUARIO_DEMO.email && pass === USUARIO_DEMO.password) {
       setError('');
@@ -70,6 +88,7 @@ export default function Login({ onLogin }) {
           <Typography sx={{ fontFamily: SERIF, fontWeight: 300, fontSize: 38, color: INK, lineHeight: 1.1, mb: '8px' }}>Bienvenido</Typography>
           <Typography sx={{ fontFamily: F, fontSize: 14, color: '#6a6a6a', mb: '30px' }}>Inicia sesión para continuar.</Typography>
 
+          {/* Formulario: Enter o el botón disparan "enviar". */}
           <Box component="form" onSubmit={enviar}>
             <Campo label="Correo electrónico" type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com" autoComplete="username" error={!!error} />
@@ -81,6 +100,7 @@ export default function Login({ onLogin }) {
                   {ver ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
                 </Box>
               } />
+            {/* El mensaje solo aparece cuando hay un intento fallido. */}
             {error && <Typography sx={{ fontFamily: F, fontSize: 12, color: '#d9534f', mt: '-6px', mb: '14px' }}>{error}</Typography>}
             <Box component="button" type="submit" sx={{
               width: '100%', mt: '6px', py: '13px', border: 'none', borderRadius: '8px', background: INK, color: '#fff',

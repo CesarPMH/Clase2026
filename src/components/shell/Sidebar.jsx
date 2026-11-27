@@ -1,4 +1,11 @@
-// Component library: MUI (Box, Typography, Tooltip)
+// ─── Sidebar ───────────────────────────────────────────────────────────────────
+// Menú lateral de navegación de la aplicación. Muestra las secciones (Inicio, Dashboard,
+// Pedidos Sucursal, Producción), con grupos que se pueden desplegar, y al pie
+// Configuración y Salir. Resalta la opción activa según la ruta actual (URL).
+// Tiene dos estados: expandido (con textos) y colapsado (solo íconos con tooltip);
+// en celular, cuando está cerrado, desaparece del todo.
+// Lo usa todo el personal para moverse entre pantallas.
+// Librería de componentes: MUI (Box, Typography, Tooltip).
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, Typography, Tooltip, useTheme, useMediaQuery } from '@mui/material';
@@ -20,10 +27,17 @@ import {
 import { DL } from '../../theme';
 
 // ─── Sidebar widths ───────────────────────────────────────────────────────────
+// Anchos del menú en píxeles: expandido (con textos) y colapsado (solo íconos). Deben coincidir con los de AppLayout.
 const W_EXPANDED  = 240;
 const W_COLLAPSED = 65;
 
 // ─── Navigation tree ─────────────────────────────────────────────────────────
+// Estructura del menú, en datos y no en JSX, para agregar o quitar opciones sin tocar el diseño.
+// Cada sección tiene "items". Un item puede ser:
+//   - normal: { id, label, icon, path }  -> navega a la ruta path.
+//   - grupo (isGroup): se despliega y tiene "children", cada hijo con su propio path.
+//   - isAction (botón destacado), soon (aparece gris con la etiqueta "Pronto") o child (sangrado).
+// Algunas rutas llevan "?vista=..." para abrir la misma pantalla de Pedidos en otra vista.
 const NAV = [
   {
     label: 'Inicio',
@@ -79,6 +93,7 @@ const NAV = [
 ];
 
 // ─── Translation key maps ─────────────────────────────────────────────────────
+// Claves de traducción de las etiquetas, por id de item. Se usan cuando un item no trae "label" escrito (ver NavItem).
 const NAV_LABEL_KEYS = {
   'pedidos-registro':   'nav.pedidosRegistro',
   'pedidos-gestion':    'nav.pedidosGestion',
@@ -109,6 +124,7 @@ const NAV_LABEL_KEYS = {
   'santa-ana': 'nav.santaAna',
 };
 
+// Claves de traducción para los nombres de sección. Varias de estas secciones son de versiones anteriores del menú y ya no aparecen en NAV.
 const SECTION_LABEL_KEYS = {
   'Comercial': 'section.comercial',
   'Administración': 'section.admin',
@@ -121,13 +137,19 @@ const SECTION_LABEL_KEYS = {
 };
 
 // ─── Nav item ─────────────────────────────────────────────────────────────────
+// Objetivo: dibujar UNA opción del menú, sea botón de acción, grupo desplegable u opción normal,
+// y adaptarla al menú expandido o colapsado.
+// Props: item (datos de NAV), open (menú expandido), isActive (opción actual), onClick (navegar a un path),
+// t (traducción), groupExpanded / onToggleGroup (estado del grupo), pathname y search (URL actual).
+// Devuelve: el elemento ya con su resalte si está activo.
 function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGroup, pathname, search }) {
+  // Banderas leídas del item para decidir cómo se pinta cada caso.
   const isSoon   = item.soon;
   const isChild  = item.child;
   const isAction = item.isAction;
   const isGroup  = item.isGroup;
 
-  // ── Action button (pill azul) ──────────────────────────────────────────────
+  // Caso 1: botón de acción. Solo se ve con el menú expandido (colapsado no hay espacio).
   if (isAction) {
     if (!open) return null;
     return (
@@ -147,11 +169,13 @@ function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGrou
     );
   }
 
-  // ── Group header (collapsible parent) ─────────────────────────────────────
+  // Caso 2: grupo desplegable. Un grupo se marca activo si alguno de sus hijos coincide con la URL;
+  // si el hijo trae "?vista=" se compara la URL completa, porque la ruta base es la misma para varios hijos.
   if (isGroup) {
     const expanded = groupExpanded;
     // Check if any child is active
     const fullCurrent = pathname + search;
+    // Por qué comparar la URL completa (pathname + search): "Calendario" y "Gestión" comparten la ruta /pedidos y solo se distinguen por el query.
     const anyChildActive = item.children?.some(ch => {
       const [cp, cq] = ch.path.split('?');
       if (cq) return fullCurrent === ch.path;
@@ -159,7 +183,7 @@ function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGrou
     });
 
     if (!open) {
-      // Collapsed sidebar: show just the icon with tooltip
+      // Menú colapsado: solo el ícono del grupo, con tooltip con su nombre.
       return (
         <Tooltip title={item.label} placement="right" arrow>
           <Box onClick={onToggleGroup} sx={{
@@ -201,7 +225,7 @@ function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGrou
           </Box>
         </Box>
 
-        {/* Children */}
+        {/* Hijos del grupo: solo se dibujan si el grupo está desplegado. childActive sigue la misma regla de la URL completa. */}
         {expanded && item.children?.map(child => {
           const [childPath, childQuery] = child.path.split('?');
           const fullCurrent = pathname + search;
@@ -247,7 +271,7 @@ function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGrou
     );
   }
 
-  // ── Regular item ──────────────────────────────────────────────────────────
+  // Caso 3: opción normal (con sangrado si es child). Con el menú colapsado se envuelve en un Tooltip.
   const content = (
     <Box
       onClick={() => !isSoon && onClick(item.path)}
@@ -289,6 +313,10 @@ function NavItem({ item, open, isActive, onClick, t, groupExpanded, onToggleGrou
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
+// Objetivo: contenedor del menú lateral; recorre NAV y pinta cada sección.
+// Props: open (expandido o no), onToggle (abrir/cerrar), onClose (cerrar tras navegar),
+// onLogout (cerrar sesión), user (usuario con sesión, hoy no se usa aquí).
+// Devuelve: el panel fijo a la izquierda.
 export default function Sidebar({ open, onToggle, onClose, onLogout, user }) {
   const navigate  = useNavigate();
   const { pathname, search } = useLocation();
@@ -296,14 +324,16 @@ export default function Sidebar({ open, onToggle, onClose, onLogout, user }) {
   const isMobile  = useMediaQuery(theme.breakpoints.down('md'));
   const { t } = useT();
 
-  // Track which groups are expanded (by item id). Default: pedidos expanded.
+  // Grupos desplegados, por id de item. Arranca con "Pedidos Sucursal" abierto porque es lo más usado.
   const [expandedGroups, setExpandedGroups] = useState({ 'pedidos-sucursal': true });
 
+  // Solo un grupo queda abierto a la vez (estilo acordeón): al abrir uno se reemplaza el estado y los demás se cierran.
   const toggleGroup = (id) => setExpandedGroups(prev => ({ [id]: !prev[id] }));
 
-  // On mobile: completely hidden (0) when closed. On desktop: icon strip (65px).
+  // En celular el menú cerrado mide 0 (desaparece y se abre como panel); en escritorio queda la tira de íconos de 65 px.
   const sidebarWidth = open ? W_EXPANDED : (isMobile ? 0 : W_COLLAPSED);
 
+  // Navegar a la ruta y colapsar el menú después, para que en celular no tape la pantalla nueva.
   const handleNav = (path) => {
     navigate(path);
     onClose(); // collapse after navigation
@@ -349,7 +379,9 @@ export default function Sidebar({ open, onToggle, onClose, onLogout, user }) {
         </Box>
       </Box>
 
-      {/* ── Navigation ───────────────────────────────────────────────── */}
+      {/* Navegación. Se recorre NAV por secciones: los grupos se delegan a NavItem con su estado desplegado
+         y las opciones normales calculan aquí si están activas.
+      */}
       <Box sx={{ flex: 1, py: '6px' }}>
         {NAV.map((section) => (
           <Box key={section.label} sx={{ mb: '4px' }}>
@@ -378,6 +410,9 @@ export default function Sidebar({ open, onToggle, onClose, onLogout, user }) {
               }
               const [itemPath, itemQuery] = item.path ? item.path.split('?') : ['', ''];
               const fullCurrent = pathname + search;
+              // Regla de "activo" para una opción normal: si la ruta trae query se compara la URL completa;
+              // si no, la ruta debe coincidir. El inicio ("/") solo se activa con coincidencia exacta; si no estaría activo
+              // siempre, porque todas las rutas empiezan con "/".
               const isActive = itemQuery
                 ? fullCurrent === item.path || fullCurrent.startsWith(item.path)
                 : (pathname === itemPath && !search) || (item.path && item.path !== '/' && pathname.startsWith(itemPath) && !itemQuery && !search.includes('tab='));
@@ -398,7 +433,7 @@ export default function Sidebar({ open, onToggle, onClose, onLogout, user }) {
         ))}
       </Box>
 
-      {/* ── Footer ───────────────────────────────────────────────────── */}
+      {/* Pie del menú: Configuración (activa en cualquier ruta /configuracion...) y cierre de sesión. */}
       <Box sx={{
         borderTop: '1px solid rgba(26,26,26,.07)',
         display: 'flex',

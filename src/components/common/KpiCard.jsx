@@ -1,4 +1,15 @@
-// Component library: MUI (Box, Typography)
+// ─── KpiCard ───────────────────────────────────────────────────────────────────
+// Tarjeta de un indicador (KPI) de los dashboards: muestra el valor principal, qué tan
+// cerca está de su meta (con un estado de color), la diferencia contra la meta y la
+// comparación con el año anterior. La usa quien analiza los dashboards (ventas, inventario, etc.).
+// Librería de componentes: MUI (Box, Typography).
+//
+// Props principales:
+//   lbl (etiqueta), val (valor ya formateado), pct (% de cumplimiento de la meta),
+//   meta / metaLbl (valor y nombre de la meta), diff / diffUp (diferencia contra la meta y si es positiva),
+//   yoyPrev / yoyDelta / yoyUp (año anterior, su variación y si es favorable),
+//   onInfo (si se envía, aparece el enlace "detalle").
+// Uso (ejemplo):
 // Usage: <KpiCard lbl="Ventas Totales" val="$1.56M" pct={104.1} meta="$1.50M" metaLbl="Presupuesto"
 //                diff="+$64K" diffUp yoyPrev="$1.39M" yoyDelta="+12.3%" yoyUp onInfo={() => {}} />
 // Extra props for "lower-is-better" KPIs (e.g. DSO):
@@ -11,24 +22,31 @@ import { DL } from '../../theme';
 
 const SERIF = "'Crimson Pro','Cormorant Garamond',Georgia,serif";
 
-// Tonos suaves por estado (fondo del chip, texto)
+// Tonos suaves por estado (fondo del chip, texto).
+// Por qué un objeto: el color sale de un solo lugar y todas las tarjetas se ven iguales.
 const TONOS = {
   ok:   { bg: 'rgba(84,126,105,.12)',  fg: '#3f6552' },
   warn: { bg: 'rgba(176,138,74,.15)',  fg: '#7d5f26' },
   bad:  { bg: 'rgba(181,89,79,.12)',   fg: '#9a4339' },
 };
 
+// Objetivo: dibujar un KPI individual.
+// Props: ver cabecera del archivo. Devuelve: la tarjeta lista para colocarse en una grilla.
 export default function KpiCard({
   lbl, val, pct, meta, metaLbl, diff, diffUp,
   yoyPrev, yoyDelta, yoyUp,
   onInfo,
   valHighlight, barSplit, diff2, diff2Up,
 }) {
+  // Semáforo de cumplimiento: 100 % o más = en meta, de 80 a 99 = atención, menos de 80 = crítico.
+  // La barra se limita a 100 % (Math.min) para que no se salga de la tarjeta si se supera la meta.
   const nivel  = pct >= 100 ? 'ok' : pct >= 80 ? 'warn' : 'bad';
   const tono   = TONOS[nivel];
   const barW   = Math.min(pct, 100);
   const estado = pct >= 100 ? 'En meta' : pct >= 80 ? 'Atención' : 'Crítico';
+  // Si no se indica diffUp, se deduce del signo del texto: un "+" al inicio cuenta como positivo.
   const isDiffUp = diffUp !== undefined ? diffUp : (diff && String(diff).startsWith('+'));
+  // Objetivo: mostrar una diferencia con flecha y color. Quita el signo del texto porque la flecha ya indica la dirección.
   const trend = (txt, up) => (
     <Typography component="span" sx={{ fontSize: 10, fontWeight: 500, color: up ? TONOS.ok.fg : TONOS.bad.fg, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
       {String(txt).startsWith('-') ? '↓' : '↑'} {String(txt).replace(/^[+-]/, '')}
@@ -79,7 +97,8 @@ export default function KpiCard({
         </Typography>
       </Box>
 
-      {/* Barra de progreso */}
+      {/* Barra de progreso. Dos modos: dividida en verde/rojo (barSplit, para KPI donde menos
+          es mejor, como DSO) o una barra normal proporcional a pct. */}
       {barSplit ? (
         <Box sx={{ height: 4, display: 'flex', borderRadius: 2, overflow: 'hidden', mb: '10px' }}>
           <Box sx={{ width: `${barSplit}%`, background: '#547e69' }} />

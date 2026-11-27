@@ -1,3 +1,31 @@
+/*
+ * NuevoPedido.jsx — Pantalla "Nuevo pedido" del sistema (React + Material UI).
+ *
+ * OBJETIVO: registrar un pedido de pastelería paso a paso, y también editar un pedido ya guardado
+ * (cuando la URL trae ?id=...).
+ *
+ * FLUJO DE 4 PASOS (barra superior):
+ *   1. Cliente → buscar o crear al cliente.                      (componente Step1)
+ *   2. Entrega → tipo de pedido, fecha/hora, lugar y dirección.  (componente Step3)
+ *   3. Pedido  → elegir productos: catálogo, accesorios o pastel/cupcakes/galletas personalizados.
+ *                                                                (componente Step2)
+ *   4. Pago    → resumen del receptor, tipo y método de pago.    (componente Step4)
+ *   OJO: los nombres Step2 y Step3 quedaron invertidos respecto al número del paso; se conservaron así
+ *   para no romper el código. El panel derecho (ResumenSidebar) resume el pedido desde el paso 3.
+ *
+ * REGLAS DE NEGOCIO:
+ *   - Total = subtotal de productos + IVA 13 % + envío.
+ *   - Envío: solo si la entrega es a Domicilio; el precio depende de la zona del departamento (ZONAS_ENVIO).
+ *   - Reserva: productos de línea en stock; puede entregarse el mismo día y NO admite pastel personalizado.
+ *   - Producción: pedido personalizado; requiere mínimo 5 días de anticipación.
+ *   - Si parte de las unidades sale de stock y parte se produce, el pedido se muestra como "Mixto".
+ *   - Cotización: se guarda con estadoPago 'Pendiente' y no se produce hasta registrar un pago.
+ *
+ * QUÉ SE GUARDA Y DÓNDE (no hay servidor; se usa localStorage del navegador):
+ *   - 'pedidos_nuevos': lista de pedidos confirmados (PED-...) y cotizaciones (COT-...).
+ *   - 'pagos_pedidos': pagos registrados por pedido (el anticipo inicial o los abonos al editar).
+ *   - Los cambios a un pedido existente no se aplican directo: se envían como solicitud de cambio.
+ */
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -46,6 +74,8 @@ import {
 } from '../data/pedidosMock';
 
 // ─── Stepper ──────────────────────────────────────────────────────────────────
+// Los 4 pasos del asistente, en el orden en que se recorren: Cliente → Entrega → Pedido → Pago.
+// 'n' es el número que se muestra dentro del círculo y se compara con el paso actual.
 const STEPS = [
   { n: 1, label: 'Cliente' },
   { n: 2, label: 'Entrega' },
@@ -55,10 +85,16 @@ const STEPS = [
 
 const SF = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
+/*
+ * Stepper: barra de progreso con los 4 pasos del asistente.
+ * Recibe: step (paso actual, 1 a 4) y onStepClick (opcional; si existe, cada paso es clickeable).
+ * Devuelve: círculos numerados unidos por líneas; los pasos ya completados se marcan con check.
+ */
 function Stepper({ step, onStepClick }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'center', gap: 0 }}>
       {STEPS.map((s, i) => {
+        // Cada paso se pinta distinto según esté completado, activo o pendiente respecto al paso actual.
         const done    = step > s.n;
         const active  = step === s.n;
         const pending = step < s.n;
@@ -127,8 +163,14 @@ function Stepper({ step, onStepClick }) {
 // ─── Sidebar de Resumen ───────────────────────────────────────────────────────
 const SB_F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
+// Frases sugeridas para dedicatorias (quedaron definidas como atajos, pero hoy no se muestran en pantalla).
 const DED_SUGS = ['Feliz Día 🎂', 'Enhorabuena 🎉', 'Con Afecto ❤️', 'En tu día ✨'];
 
+/*
+ * DedicatoriaInline: caja de texto para escribir la dedicatoria de UNA unidad de pastel.
+ * Recibe: value (texto actual) y onChange (función que recibe el nuevo texto).
+ * Tiene un límite de 100 caracteres y un botón "×" para borrarla.
+ */
 function DedicatoriaInline({ value, onChange }) {
   return (
     <Box sx={{ mt: '6px', borderTop: `1px dashed ${DL.border2}`, pt: '7px' }}>
@@ -158,13 +200,22 @@ function DedicatoriaInline({ value, onChange }) {
 }
 
 // ─── Item row con dedicatoria colapsable ──────────────────────────────────────
+/*
+ * OrdenItemRow: fila de un producto dentro de una orden en el resumen lateral.
+ * Recibe: el item, su posición (ii), el id de su orden y los callbacks para quitarlo, cambiar cantidad,
+ * editar dedicatorias y dividir stock/producción. hideSplit oculta el campo "En stock" y readOnly
+ * bloquea la edición (se usa en el paso de pago, donde el pedido ya no se modifica).
+ */
 function OrdenItemRow({ item, ii, totalItems, ordenId, onRemoveItem, onChangeQty, onDedicatoriaChange, onStockSplit, hideSplit, readOnly }) {
   const [dedOpen, setDedOpen] = useState(false);
   const qty = item.qty || 1;
+  // Solo los productos de repostería o con pastel configurado admiten dedicatoria (las galletas no).
   const hasDed = (item.categoria === 'Repostería' || !!item.pastelConfig) && item.pastelConfig?.tipoProd !== 'galletas';
 
   const [stockInput, setStockInput] = useState('');
 
+  // Reparte la línea entre stock y producción: el número escrito en "En stock" es lo que ya hay en tienda
+  // y el resto se manda a producción. Se ignora si no es un número válido o si no es menor a la cantidad pedida.
   const ejecutarSplit = () => {
     if (hideSplit) return;
     const raw = stockInput.trim();
@@ -218,6 +269,8 @@ function OrdenItemRow({ item, ii, totalItems, ordenId, onRemoveItem, onChangeQty
       {/* Resumen pastel personalizado (colapsable) */}
       {dedOpen && item.pastelConfig && (() => {
         const c = item.pastelConfig;
+        // Los pasteles montados (de 2 pisos) guardan sabor, remojo y relleno por piso (sufijo _p2 para el piso 2),
+        // por eso aquí se separan las filas en "Piso 1", "Piso 2" y datos generales.
         const esMontadoResumen = !!c.tamano?.montado;
         const filasPiso1 = esMontadoResumen ? [
           { label: 'Sabor',   val: c.sabor },
@@ -295,6 +348,7 @@ function OrdenItemRow({ item, ii, totalItems, ordenId, onRemoveItem, onChangeQty
 
       {/* Dedicatorias de Pastelería (colapsable) */}
       {dedOpen && item.categoria === 'Repostería' && (() => {
+        // Con 1 unidad hay una sola dedicatoria; con varias unidades se pide una por cada unidad (item.dedicatorias[k]).
         if (qty === 1) {
           return (
             <DedicatoriaInline
@@ -391,8 +445,15 @@ function OrdenItemRow({ item, ii, totalItems, ordenId, onRemoveItem, onChangeQty
   );
 }
 
+/*
+ * OrdenAccordion: tarjeta colapsable que agrupa los productos de una orden (Orden I, II, ...).
+ * Recibe: la orden, su índice (oi), callbacks para editar/quitar y el tipo de pedido.
+ * El campo "En stock" se oculta en órdenes de Producción y en pedidos de tipo Producción o Reserva.
+ * Con readOnly (paso de pago) no se puede editar ni eliminar nada.
+ */
 function OrdenAccordion({ orden, oi, onRemoveItem, onChangeQty, onRemoveOrden, onDedicatoriaChange, onStockSplit, tipoPedido, readOnly, onEditOrden }) {
   const [open, setOpen] = useState(true);
+  // Subtotal de la orden (sin IVA ni envío): precio × cantidad de cada producto.
   const subtotal = orden.items.reduce((s, it) => s + it.precio * (it.qty || 1), 0);
 
   return (
@@ -473,14 +534,25 @@ function OrdenAccordion({ orden, oi, onRemoveItem, onChangeQty, onRemoveOrden, o
   );
 }
 
+/*
+ * ResumenSidebar: panel derecho con el resumen del pedido, visible en todos los pasos.
+ * Recibe: datos del cliente/entrega/dirección, precioEnvio, el paso actual, las órdenes y los callbacks
+ * de edición (onAgregarPastel se recibe pero hoy no se usa). pastelEnProceso bloquea el pago mientras
+ * haya un pastel a medio configurar.
+ * Provoca: onGuardar (guardar cotización o cambios) y onPagar (avanzar al paso de pago).
+ */
 function ResumenSidebar({ cliente, entrega, direccion, precioEnvio, step, ordenes, onRemoveItem, onChangeQty, onRemoveOrden, onAgregarPastel, pastelEnProceso, onGuardar, onPagar, tipoPedido, onDedicatoriaChange, onStockSplit, isConfirmedEdit, pagoError, onEditOrden }) {
+  // Subtotal general: suma de todas las órdenes antes de impuestos y envío.
   const subtotal = useMemo(() =>
     ordenes.reduce((s, o) => s + o.items.reduce((ss, it) => ss + it.precio * (it.qty || 1), 0), 0),
     [ordenes]);
+  // El IVA (13 %) y el envío solo se suman al total en el paso 4 (Pago); en los pasos anteriores se muestra el subtotal.
   const iva = subtotal * 0.13;
   const envio = precioEnvio || 0;
   const total = subtotal + (step === 4 ? iva + envio : 0);
 
+  // Una Reserva pasa a ser "Mixto" cuando parte de las unidades se producen (orden de producción o stock insuficiente)
+  // y el resto sale de stock.
   // Si algún item tiene split parcial de stock → pedido Mixto
   const tipoPedidoEfectivo = useMemo(() => {
     if (tipoPedido !== 'Reserva') return tipoPedido;
@@ -560,6 +632,7 @@ function ResumenSidebar({ cliente, entrega, direccion, precioEnvio, step, ordene
 
       {/* Footer */}
       <Box sx={{ p: '12px 14px', borderTop: `1px solid ${DL.border}` }}>
+        {/* Paso 4: se desglosa subtotal + IVA 13 % + envío = total. En los demás pasos solo se muestra el total parcial. */}
         {step === 4 ? (
           <Box sx={{ mb: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {[
@@ -631,6 +704,7 @@ function ResumenSidebar({ cliente, entrega, direccion, precioEnvio, step, ordene
   );
 }
 
+// Convierte la posición de la orden (1, 2, 3...) a número romano para rotularla ("Orden I", "Orden II"...).
 function toRoman(n) {
   const map = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
   return map[n - 1] || n;
@@ -642,6 +716,7 @@ const TIPO_DOC_OPTIONS = ['DUI', 'Pasaporte', 'Carné de Residente'];
 const ACT_ECONOMICA_OPTIONS = ['Comercio al por menor', 'Comercio al por mayor', 'Servicios', 'Industria', 'Agropecuario', 'Otro'];
 
 // ─── Departamentos y Municipios de El Salvador ────────────────────────────────
+// Departamentos de El Salvador con sus municipios; alimenta los selects en cascada de las direcciones.
 const SV_GEO = {
   'Ahuachapán':    ['Ahuachapán','Apaneca','Atiquizaya','Concepción de Ataco','El Refugio','Guaymango','Jujutla','San Francisco Menéndez','San Lorenzo','San Pedro Puxtla','Tacuba','Turín'],
   'Santa Ana':     ['Santa Ana','Candelaria de la Frontera','Chalchuapa','Coatepeque','El Congo','El Porvenir','Masahuat','Metapán','San Antonio Pajonal','San Sebastián Salitrillo','Santa Rosa Guachipilín','Santiago de la Frontera','Texistepeque'],
@@ -661,8 +736,13 @@ const SV_GEO = {
 const DEPTOS = Object.keys(SV_GEO);
 
 // ─── Direcciones ──────────────────────────────────────────────────────────────
+// Plantilla de dirección vacía: se copia al abrir el formulario de "Nueva dirección".
 const DIR_EMPTY = { direccion: '', departamento: '', municipio: '', comentario: '', telefono: '', responsable: '' };
 
+/*
+ * DirRowMenu: menú de tres puntos (Editar / Eliminar) de cada fila de la tabla de direcciones.
+ * Recibe: onEdit y onDelete, que se ejecutan al elegir la opción correspondiente.
+ */
 function DirRowMenu({ onEdit, onDelete }) {
   const [anchor, setAnchor] = useState(null);
   return (
@@ -686,6 +766,11 @@ function DirRowMenu({ onEdit, onDelete }) {
   );
 }
 
+/*
+ * DireccionesSection: lista de direcciones de un cliente con formulario para agregar, editar y eliminar.
+ * Recibe: direcciones (arreglo actual), onChange (recibe el arreglo actualizado) e inputSx (estilos de campos).
+ * Trabaja sobre un borrador (draft) y solo modifica la lista al presionar "Guardar".
+ */
 function DireccionesSection({ direcciones, onChange, inputSx }) {
   const [editIdx, setEditIdx] = useState(null); // null = cerrado, -1 = nueva
   const [draft, setDraft] = useState(DIR_EMPTY);
@@ -695,6 +780,8 @@ function DireccionesSection({ direcciones, onChange, inputSx }) {
   const openEdit = idx => { setDraft({ ...direcciones[idx] }); setEditIdx(idx); };
   const cancel = () => setEditIdx(null);
 
+  // Exige al menos la dirección escrita. Con editIdx -1 agrega una dirección nueva (con id temporal);
+  // en otro caso reemplaza la que se está editando.
   const save = () => {
     if (!draft.direccion.trim()) return;
     if (editIdx === -1) {
@@ -815,6 +902,7 @@ function DireccionesSection({ direcciones, onChange, inputSx }) {
           </Typography>
           <TextField fullWidth size="small" label="Dirección *" value={draft.direccion} onChange={e => setD('direccion', e.target.value)}
             sx={{ mb: '8px', '& .MuiOutlinedInput-root': { fontSize: 12, fontFamily: F2, borderRadius: '8px' }, '& label': { fontSize: 12, fontFamily: F2 } }} />
+          {/* Departamento → Municipio en cascada: al cambiar el departamento se borra el municipio porque depende de él */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', mb: '8px' }}>
             <FormControl size="small" sx={{ '& .MuiOutlinedInput-root': { fontSize: 12, fontFamily: F2, borderRadius: '8px' }, '& label': { fontSize: 12, fontFamily: F2 } }}>
               <InputLabel>Departamento</InputLabel>
@@ -862,6 +950,11 @@ function DireccionesSection({ direcciones, onChange, inputSx }) {
   );
 }
 
+/*
+ * NuevoClienteModal: ventana para registrar un cliente nuevo sin salir del pedido.
+ * Recibe: open (visible o no), onClose y onGuardar (recibe el cliente creado).
+ * Cambia los campos fiscales según el tipo: Natural (DUI/documento) o Jurídico (NIT/NRC).
+ */
 function NuevoClienteModal({ open, onClose, onGuardar }) {
   const [tipo, setTipo] = useState('Natural');
   const [activo, setActivo] = useState(true);
@@ -876,6 +969,8 @@ function NuevoClienteModal({ open, onClose, onGuardar }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Arma el cliente según su tipo: persona Natural usa nombre y documento; Jurídica usa razón social
+  // (o nombre comercial) y NIT. Se entrega a Step1, que lo deja seleccionado en el pedido.
   const handleGuardar = () => {
     const nuevo = {
       id: Date.now(),
@@ -1045,18 +1140,26 @@ function NuevoClienteModal({ open, onClose, onGuardar }) {
   );
 }
 
+/*
+ * Step1 (paso 1 del asistente, "Cliente"): buscar y seleccionar al cliente del pedido.
+ * Recibe: data (estado del pedido), onChange (actualiza el estado), isEditing (pedido ya confirmado:
+ * el cliente queda de solo lectura) y showErrors (marca en rojo si falta elegir cliente).
+ * Permite crear un cliente nuevo desde el modal si no aparece en la búsqueda.
+ */
 function Step1({ data, onChange, isEditing, showErrors }) {
   const [search, setSearch] = useState(data.clienteSearch || '');
   const [showDrop, setShowDrop] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const ref = useRef(null);
 
+  // Cierra la lista de resultados cuando se hace clic fuera del buscador.
   useEffect(() => {
     const fn = e => { if (ref.current && !ref.current.contains(e.target)) setShowDrop(false); };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
+  // Filtra clientes por nombre, DUI, NIT o teléfono y muestra como máximo 6 resultados.
   const resultados = useMemo(() => {
     if (!search) return [];
     const q = search.toLowerCase();
@@ -1068,6 +1171,7 @@ function Step1({ data, onChange, isEditing, showErrors }) {
     ).slice(0, 6);
   }, [search]);
 
+  // Guarda el cliente elegido en el estado de la página y limpia el buscador.
   const seleccionar = (c) => {
     onChange({ cliente: c, tipoCliente: c.tipo, clienteSearch: '' });
     setSearch('');
@@ -1227,6 +1331,10 @@ function Step1({ data, onChange, isEditing, showErrors }) {
 // ─── Step 2: Detalles del pedido ──────────────────────────────────────────────
 const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
+/*
+ * ProductGrid: cuadrícula de productos del catálogo que se pueden marcar para el pedido.
+ * Recibe: productos, seleccion (objeto id → cantidad), onToggle (marca/desmarca) y search (texto de filtro).
+ */
 function ProductGrid({ productos, seleccion, onToggle, search }) {
   const filtrados = useMemo(() => {
     if (!search) return productos;
@@ -1314,11 +1422,21 @@ function ProductGrid({ productos, seleccion, onToggle, search }) {
   );
 }
 
+/*
+ * PastelConfigurador: asistente interno para personalizar un producto de repostería
+ * (pastel, cupcakes o galletas) paso a paso, con un menú de pasos a la izquierda.
+ * Recibe: config (lo elegido hasta ahora), onChange (recibe solo los campos que cambian),
+ * tipoProd ('pastel' | 'cupcake' | 'galletas'), accesoriosDisp (accesorios que se pueden agregar)
+ * e isCorporativo (habilita subir imagen de referencia para clientes corporativos).
+ * No calcula el precio final: solo guarda las elecciones en config; el precio lo arma Step2.
+ */
 function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], isCorporativo = false }) {
   const esCupcake  = tipoProd === 'cupcake';
   const esGalletas = tipoProd === 'galletas';
+  // Un pastel "montado" es de 2 pisos: sus opciones se piden dos veces (las del piso 2 llevan sufijo _p2).
   const esMontado  = !esCupcake && !esGalletas && !!config.tamano?.montado;
 
+  // Pasos que se muestran según el producto. El paso "Imagen" solo aplica a clientes corporativos (en galletas siempre).
   const STEPS = (esCupcake ? CUPCAKE_STEPS : esGalletas ? GALLETAS_STEPS : PASTEL_STEPS)
     .filter(s => (s !== 'Imagen' || isCorporativo) || esGalletas);
   const tamanos = esCupcake ? [] : PASTEL_TAMANOS;
@@ -1346,6 +1464,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
     }
   }, [esMontado]);
 
+  // Cada paso del pastel se asocia con la clave de config donde se guarda lo elegido (KEY_MAP)
+  // y con la lista de opciones que se muestra en pantalla (OPTIONS_MAP).
   const PASTEL_KEY_MAP = {
     'Estilo de Relleno': 'tipoRelleno',
     'Sabor de Torta':  'sabor',
@@ -1380,6 +1500,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
   const getValorPastel = (step) => config[PASTEL_KEY_MAP[step]] || '';
   const getValorCupcake = (step) => config[CUPCAKE_KEY_MAP[step]] || '';
 
+  // Dice si un paso ya está completo para marcarlo con el check verde del menú. En pasteles montados
+  // se exige también la elección del piso 2; Accesorios e Imagen son opcionales y solo marcan si hay algo cargado.
   const isComplete = (step) => {
     if (step === 'Accesorios') return !!(config.accesorios && Object.keys(config.accesorios).length > 0);
     if (step === 'Imagen') return !!(config.cup_img_file || config.cup_comentarios);
@@ -1410,6 +1532,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
     return !!getValorPastel(step);
   };
 
+  // Avance automático: al elegir una opción pasa al paso siguiente tras una pausa breve (160 ms)
+  // para que la persona alcance a ver su selección antes del cambio.
   const avanzarSiguiente = (currentStep) => {
     const idx = STEPS.indexOf(currentStep);
     if (idx < STEPS.length - 1) setTimeout(() => setStepActivo(STEPS[idx + 1]), 160);
@@ -1544,6 +1668,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
       <Box sx={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
 
         {/* ── CUPCAKE STEPS ── */}
+        {/* La cantidad de cupcakes se guarda también como un "tamaño" personalizado (cantidad × precio unitario)
+            para que el cálculo del precio lo trate igual que un pastel. */}
         {esCupcake && stepActivo === 'Cantidad' && (
           <Box sx={{ p: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <Typography sx={{ fontSize: 9, fontWeight: 500, color: DL.tS, textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: F }}>
@@ -1618,6 +1744,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
               <Typography sx={{ fontSize: 9, fontWeight: 500, color: DL.tS, textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: F, mb: '8px' }}>
                 Imagen de referencia
               </Typography>
+              {/* La imagen no se sube a un servidor: solo se guarda su nombre y una URL temporal para la vista previa. */}
               <Box
                 component="label"
                 sx={{
@@ -1722,6 +1849,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
 
         {/* ── ACCESORIOS (ambos modos) ── */}
         {stepActivo === 'Accesorios' && (() => {
+          // Filtra los accesorios por la categoría elegida y por el texto de búsqueda.
           const accFiltrado = accesoriosDisp.filter(a =>
             (accCat === 'Todas' || a.categoria === accCat) &&
             (!accSearch || a.nombre.toLowerCase().includes(accSearch.toLowerCase()))
@@ -1753,6 +1881,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                 const nombreKey = `topper_nombre_${subcat.id}`;
                 const imgData = config.accesorios?.[imgKey] || {};
                 const nombreData = config.accesorios?.[nombreKey] || {};
+                // Guarda datos extra del topper (imagen o nombre) dentro de config.accesorios, con una clave propia por subcategoría.
                 const updateTopperExtra = (key, fields) => {
                   const prev = config.accesorios || {};
                   onChange({ accesorios: { ...prev, [key]: { ...(prev[key] || {}), ...fields } } });
@@ -1777,6 +1906,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                         {productosFiltrados.map(acc => {
                           const sel = !!(config.accesorios?.[acc.id]);
                           const qty = config.accesorios?.[acc.id]?.qty || 0;
+                          // Suma o resta cantidad al accesorio; al llegar a 0 se quita de la selección.
                           const changeQty = (delta) => {
                             const prev = config.accesorios || {};
                             const next = { ...prev };
@@ -1915,12 +2045,15 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
 
         {/* Estilo de Relleno */}
         {!esCupcake && stepActivo === 'Estilo de Relleno' && (() => {
+          // Tarjetas con los tipos de relleno de un piso; cada una muestra su costo extra por porción.
+          // Al cambiar el tipo se borra el relleno ya elegido, porque las opciones de relleno dependen del tipo.
           const renderTipoCards = (configKey, rellenoKey, pisoLabel) => (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {esMontado && <Typography sx={{ fontSize: 9, fontWeight: 500, color: DL.blue, textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: F }}>{pisoLabel}</Typography>}
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {PASTEL_TIPOS_RELLENO.map(tipo => {
                   const sel = config[configKey]?.id === tipo.id;
+                  // En pasteles montados solo se avanza de paso cuando ambos pisos ya tienen su tipo elegido.
                   const otroCompleto = configKey === 'tipoRelleno' ? !!config.tipoRelleno_p2 : !!config.tipoRelleno;
                   return (
                     <Box key={tipo.id} onClick={() => {
@@ -1962,6 +2095,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
 
         {/* Relleno de Torta */}
         {!esCupcake && stepActivo === 'Relleno de Torta' && (() => {
+          // Algunos rellenos se bloquean según la combinación: unos solo van en pasteles dobles (no triples)
+          // y otros no se pueden usar en pasteles montados.
           const renderRellenoGrid = (rellenoKey, tipoKey, pisoLabel) => {
             const esTriple = config[tipoKey]?.id === 'triple';
             const otroCompleto = rellenoKey === 'relleno' ? !!config.relleno_p2 : !!config.relleno;
@@ -2007,6 +2142,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
         })()}
 
         {!esCupcake && (stepActivo === 'Textura y Color' ? (() => {
+          // Paso "Textura y Color": cada piso necesita un tipo de textura y, si esa textura ofrece varios colores,
+          // también un color. "Según el diseño" no pide color y se aplica a ambos pisos (con una imagen de referencia).
           const texturaPisoCompleta = (baseKey, colorKey) => {
             const base = config[baseKey];
             if (!base) return false;
@@ -2014,14 +2151,17 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
             const colores = PASTEL_COLORES_POR_TEXTURA[base] || [];
             return colores.length <= 1 || !!config[colorKey];
           };
-          const p1OK = texturaPisoCompleta('textura_base', 'textura_color');
-          const p2OK = !esMontado || igualDisenoP1 || igualDisenoP2 || texturaPisoCompleta('textura_base_p2', 'textura_color_p2');
-          const necesitaBoton = esMontado || config.textura_base === 'Según el diseño' || config.textura_base_p2 === 'Según el diseño';
-
+          // Se declaran antes de p2OK: si se leyeran después, un pastel escalonado fallaría (variable aún sin inicializar).
           const igualDisenoP1 = config.textura_base === 'Según el diseño';
           const igualDisenoP2 = config.textura_base_p2 === 'Según el diseño';
 
+          const p1OK = texturaPisoCompleta('textura_base', 'textura_color');
+          const p2OK = !esMontado || igualDisenoP1 || igualDisenoP2 || texturaPisoCompleta('textura_base_p2', 'textura_color_p2');
+          // El botón "Continuar" solo hace falta cuando no hay avance automático: pasteles montados o textura "Según el diseño".
+          const necesitaBoton = esMontado || config.textura_base === 'Según el diseño' || config.textura_base_p2 === 'Según el diseño';
+
           const renderTexturaSection = (baseKey, colorKey, texturaKey, otroBaseKey, otroColorKey, otroTexturaKey, pisoLabel) => {
+            // Si un piso elige "Según el diseño", el otro piso se bloquea porque ese diseño cubre ambos.
             const bloqueadoPorOtro = esMontado && (
               (baseKey === 'textura_base' && igualDisenoP2) ||
               (baseKey === 'textura_base_p2' && igualDisenoP1)
@@ -2158,6 +2298,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
             </Box>
           );
         })() : stepActivo === 'Borde de Torta' ? (() => {
+          // Paso "Borde de Torta" (ruedo): se elige tipo → estilo → color. "Sin borde" ya es una opción completa.
           const ruedoPisoCompleto = (tipoKey, estiloKey, colorKey) => {
             const tipo = config[tipoKey];
             if (!tipo) return false;
@@ -2265,6 +2406,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
           );
         })() : stepActivo === 'Dedicatoria' ? (
           <Box sx={{ p: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Paso Dedicatoria: se elige "Sin mensaje" o se escribe un texto (máximo 100 caracteres) y el tipo de plaquita. */}
             {/* Sin mensaje */}
             <Box>
               <Box onClick={() => {
@@ -2352,6 +2494,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
           </Box>
         ) : stepActivo === 'Imagen de referencia' ? (
           <Box sx={{ p: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Paso opcional: imagen de referencia del diseño. Se puede marcar "Sin imagen" para dar el paso por completado. */}
             {/* Sin imagen (mismo estilo y lugar que "Sin mensaje") */}
             {!config.pas_img_file && (
               <Box>
@@ -2423,6 +2566,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                 <Typography sx={{ fontSize: 9, fontWeight: 500, color: DL.tS, textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: F, mb: '10px' }}>
                   ¿Qué cambios quiere hacer a la imagen?
                 </Typography>
+                {/* Tres tipos de cambio posibles sobre la imagen (eliminar, cambiar, agregar); cada uno se activa
+                    y guarda su texto en config.pas_modificaciones. */}
                 {[
                   { tipo: 'eliminar', label: '+ Eliminar algo', placeholder: 'Eliminar algo... ¿qué elemento?', color: '#dc2626', bg: '#fee2e2', bd: '#fca5a5' },
                   { tipo: 'cambiar',  label: '+ Cambiar algo',  placeholder: 'Cambiar algo... ¿qué y por qué?', color: '#d97706', bg: '#fef3c7', bd: '#fcd34d' },
@@ -2494,6 +2639,8 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
             )}
           </Box>
         ) : esMontado && (stepActivo === 'Sabor de Torta' || stepActivo === 'Remojo de Torta') ? (() => {
+          // Pastel montado: sabor y remojo se eligen por separado para cada piso
+          // (la clave normal es del piso 1 y la misma clave con sufijo _p2 es del piso 2).
           const p1Key = PASTEL_KEY_MAP[stepActivo];
           const p2Key = p1Key + '_p2';
           const opciones = PASTEL_OPTIONS_MAP[stepActivo] || [];
@@ -2505,6 +2652,7 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
                   {opciones.map(op => {
                     const sel = config[valKey] === op;
+                    // Regla de negocio: el sabor Cacao no está disponible en pasteles montados.
                     const bloqueado = esMontado && stepActivo === 'Sabor de Torta' && op === 'Cacao';
                     return (
                       <Tooltip key={op} title={bloqueado ? 'No disponible para pastel montado' : ''} disableHoverListener={!bloqueado}>
@@ -2560,6 +2708,14 @@ function PastelConfigurador({ config, onChange, tipoProd, accesoriosDisp = [], i
   );
 }
 
+/*
+ * Step2 (paso 3 de la barra, "Pedido"): elegir los productos del pedido.
+ * Tiene 4 pestañas: Catálogo, Personalizado (pastel/cupcakes/galletas), Accesorios Pasteles y Accesorios Cupcakes.
+ * Recibe: ordenes y onOrdenesChange (lista de órdenes del pedido), tipoPedido (Reserva/Producción),
+ * pastelConfig y onPastelConfigChange (borrador del pastel en armado), las selecciones de catálogo/accesorios,
+ * isCorporativo y forceTabTo (orden del padre para abrir una pestaña concreta).
+ * Provoca: crea o actualiza órdenes en el estado de la página principal.
+ */
 function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pastelConfig, onPastelConfigChange, selCatalogo, setSelCatalogo, selAccesorios, setSelAccesorios, selAccesoriosCupcakes, setSelAccesoriosCupcakes, isCorporativo, forceTabTo }) {
   const setPastelConfig = onPastelConfigChange;
   const [dedicatorias, setDedicatorias] = useState({}); // { [prodId]: string }
@@ -2572,6 +2728,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
   const [sortOrder, setSortOrder] = useState('');
   const [tipoProd, setTipoProd] = useState('pastel');
   const lastForceSeq = useRef(null);
+  // Permite que la página principal fuerce abrir una pestaña (por ejemplo al editar una orden);
+  // 'seq' evita repetir la orden cuando el padre se vuelve a renderizar.
   useEffect(() => {
     if (forceTabTo && forceTabTo.seq !== lastForceSeq.current) {
       lastForceSeq.current = forceTabTo.seq;
@@ -2580,6 +2738,7 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     }
   }, [forceTabTo]);
 
+  // Ordena los productos de la lista según la opción elegida (A-Z, Z-A o precio); sin opción deja el orden original.
   const applySort = (arr) => {
     if (!sortOrder) return arr;
     const s = [...arr];
@@ -2600,6 +2759,7 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     return applySort(base);
   }, [subAcc, sortOrder]);
 
+  // Marca o desmarca un producto (con cantidad inicial 1) y sincroniza la orden con la selección nueva.
   const toggleItem = (sel, setSel, prod) => {
     setSel(prev => {
       const qty = prev[prod.id] || 0;
@@ -2614,6 +2774,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     });
   };
 
+  // Mantiene UNA sola orden de Catálogo y una de Accesorios: reconstruye sus items a partir de la selección
+  // y conserva lo que ya se había editado (cantidades, dedicatorias) para no perderlo al marcar otro producto.
   const actualizarOrden = (tipo, seleccion) => {
     const productos = tipo === 'Catalogo' ? CATALOGO : ACCESORIOS;
     const tipoLabel = tipo === 'Catalogo' ? 'Catálogo' : 'Accesorios';
@@ -2640,6 +2802,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     });
   };
 
+  // Convierte lo configurado en una orden nueva (Pastel, Cupcakes o Galletas personalizados) y deja limpio el
+  // configurador. No agrega nada si falta el tamaño (o la cantidad, en el caso de las galletas).
   const agregarPastel = () => {
     const esGalletasLocal = tipoProd === 'galletas';
     if (!pastelConfig.tamano && !esGalletasLocal) return;
@@ -2650,6 +2814,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     const tamanoLabel = esGalletasLocal
       ? `${pastelConfig.gal_qty} galletas · ${pastelConfig.gal_forma || ''}`
       : pastelConfig.tamano.label;
+    // Precio del pastel = precio base del tamaño + extra del tipo de relleno por porción (en pasteles montados
+    // cada piso suma el suyo). En galletas queda en 0 aquí; los accesorios elegidos se suman aparte (accTotal).
     const tamanoPrecio = esGalletasLocal ? 0 : (() => {
       const tam = pastelConfig.tamano;
       const basePrice = tam.precioBase ?? tam.precio ?? 0;
@@ -2661,6 +2827,7 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
       return basePrice + relExtra + relExtra_p2;
     })();
     const accTotal = Object.values(pastelConfig.accesorios || {}).reduce((s, a) => s + (a.precio || 0) * (a.qty || 1), 0);
+    // SKU provisional: prefijo del tipo + tamaño + últimos 3 dígitos de la hora, para distinguir cada orden personalizada.
     const skuCode = `${prefix}-${tamanoLabel.replace(/\s+/g, '').slice(0, 6).toUpperCase()}-${String(Date.now()).slice(-3)}`;
     const items = [{
       nombre: `${nombreBase} ${tamanoLabel}${!esGalletasLocal && pastelConfig.sabor ? ' · ' + pastelConfig.sabor : ''}`,
@@ -2670,10 +2837,12 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     }];
     const tipoOrden = esCupcake ? 'Cupcakes Personalizados' : esGalletasLocal ? 'Galletas Personalizadas' : 'Pastel Personalizado';
     onOrdenesChange(prev => [...prev, { id: Date.now(), tipo: tipoOrden, esCatalogo: false, items }]);
+    // Reinicia el configurador para poder armar otro producto desde cero y regresa al catálogo.
     setPastelConfig({ tamano: null, tipoProd: 'pastel', tipoRelleno: null, tipoRelleno_p2: null, sabor: '', sabor_p2: '', remojo: '', remojo_p2: '', relleno: '', relleno_p2: '', textura: '', textura_base: '', textura_color: null, textura_p2: '', textura_base_p2: '', textura_color_p2: null, ruedo: '', ruedo_tipo: '', ruedo_estilo: '', ruedo_color: null, ruedo_p2: '', ruedo_tipo_p2: '', ruedo_estilo_p2: '', ruedo_color_p2: null, dedicatoria: '', dedicatoriaTipo: null, pas_img_file: null, pas_img_url: null, pas_modificaciones: {} });
     setTabActual('Catalogo');
   };
 
+  // Pestañas del paso. "Personalizado" se desactiva en una Reserva porque esta no admite pastel personalizado.
   const TABS2 = [
     { id: 'Catalogo',              label: 'Catálogo' },
     { id: 'Pastel Personalizado',  label: 'Personalizado' },
@@ -2681,6 +2850,7 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
     { id: 'AccesoriosCupcakes',    label: 'Accesorios Cupcakes' },
   ];
 
+  // Barra de subcategorías reutilizable (Todas, y las categorías del catálogo o de accesorios).
   const SubCatBar = ({ cats, active, onSelect }) => (
     <Box sx={{ borderBottom: `1px solid ${DL.border}` }}>
       <Box sx={{ display: 'flex', alignItems: 'center', px: '12px', gap: '8px' }}>
@@ -2714,6 +2884,7 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
           <Box sx={{ display: 'flex', gap: '6px', flex: 1, flexWrap: 'wrap' }}>
             {TABS2.map(t => {
               const active = tabActual === t.id;
+              // Regla de negocio: una Reserva no admite pastel personalizado, por eso esa pestaña queda deshabilitada.
               const disabled = t.id === 'Pastel Personalizado' && tipoPedido === 'Reserva';
               return (
                 <Box key={t.id}
@@ -2796,6 +2967,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
             })}
           </Box>
           <PastelConfigurador config={pastelConfig} onChange={u => setPastelConfig(p => ({ ...p, ...u }))} tipoProd={tipoProd} accesoriosDisp={ACCESORIOS} isCorporativo={isCorporativo} />
+          {/* Barra inferior: muestra el resumen del tamaño/cantidad elegido y el botón que agrega el producto como nueva orden
+              (no se habilita hasta tener tamaño o cantidad). */}
           {(() => {
               const esGal = tipoProd === 'galletas';
               const esCup = tipoProd === 'cupcake';
@@ -2929,6 +3102,8 @@ function Step2({ ordenes, onOrdenesChange, cliente, onTabChange, tipoPedido, pas
 }
 
 // ─── Zonas de envío por departamento (distancia desde Calle Istmania, San Salvador) ───
+// Tarifa de envío a domicilio por departamento (zonas 1 a 4 según la distancia desde San Salvador).
+// Se usa solo cuando el lugar de entrega es "Domicilio".
 const ZONAS_ENVIO = {
   'San Salvador': { zona: 1, label: 'Zona 1',  precio: 3.00  },
   'La Libertad':  { zona: 2, label: 'Zona 2',  precio: 5.00  },
@@ -2947,6 +3122,12 @@ const ZONAS_ENVIO = {
 };
 
 // ─── Step 3: Datos de entrega ─────────────────────────────────────────────────
+/*
+ * Step3 (paso 2 de la barra, "Entrega"): cuándo, dónde y de qué tipo es la entrega.
+ * Recibe: data (estado del pedido) y onChange (actualiza el estado), direccionesCliente (direcciones del
+ * cliente elegido), onAgregarDireccion (guarda una dirección nueva) y showErrors (marca campos obligatorios vacíos).
+ * Define el tipo de pedido (Reserva o Producción), que determina la fecha mínima y los productos permitidos.
+ */
 function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, isCorporativo, onToggleCorporativo, showErrors }) {
   const [modalDirOpen, setModalDirOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -2964,6 +3145,7 @@ function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, is
       <Box sx={{ mb: '24px' }}>
         <Label required>Tipo de Pedido</Label>
         <Box sx={{ display: 'flex', gap: '10px', mt: '8px' }}>
+          {/* Al cambiar el tipo de pedido se borra la fecha, porque la anticipación mínima es distinta en cada tipo. */}
           {[
             { val: 'Reserva',    desc: 'Productos de línea en stock. Disponible el mismo día.', color: '#15803d', bg: '#f0fdf4', bd: '#bbf7d0' },
             { val: 'Producción', desc: 'Pedido personalizado. Requiere 5 días de anticipación.', color: DL.blue, bg: 'rgba(84,126,105,.07)', bd: 'rgba(84,126,105,.25)' },
@@ -2998,6 +3180,7 @@ function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, is
             error={showErrors && !data.fechaEntrega}
             helperText={showErrors && !data.fechaEntrega ? 'Selecciona una fecha de entrega' : ''}
             slotProps={{ htmlInput: {
+              // Fecha mínima: hoy para Reserva (mismo día) y hoy + 5 días para Producción (anticipación mínima del negocio).
               min: (() => {
                 const d = new Date();
                 if (data.tipoPedido === 'Producción') d.setDate(d.getDate() + 5);
@@ -3083,6 +3266,8 @@ function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, is
             </Box>
 
             {/* Chip costo de envío */}
+            {/* El envío solo se cobra a Domicilio: la tarifa sale del departamento de la dirección elegida (ZONAS_ENVIO).
+                En los demás lugares de entrega es $0.00. */}
             <Box sx={{ flexShrink:0 }}>
               <Typography sx={{ fontSize: 10, fontWeight: 500, color: DL.tS, textTransform: 'uppercase', letterSpacing: '0.06em', mb: '5px' }}>&nbsp;</Typography>
               <Box sx={{ display:'flex', alignItems:'center', gap:'8px', px:'14px', height:'40px', borderRadius:'8px', background:'#f8fafc', border:'1px solid rgba(0,0,0,.23)' }}>
@@ -3152,6 +3337,7 @@ function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, is
                     <Box onClick={() => setShowForm(false)} sx={{ flex:1, py:'8px', borderRadius:'8px', textAlign:'center', cursor:'pointer', border:`1px solid ${DL.border}`, background:'#fff', '&:hover':{ background:DL.bg } }}>
                       <Typography sx={{ fontSize:12, fontWeight: 500, color:DL.tM, fontFamily:SF }}>Cancelar</Typography>
                     </Box>
+                    {/* Al guardar, la dirección se agrega a las del cliente y queda seleccionada como dirección de entrega. */}
                     <Box onClick={() => {
                       if (!nuevaDir.direccion?.trim()) return;
                       const obj = { ...nuevaDir, id: Date.now() };
@@ -3216,10 +3402,19 @@ function Step3({ data, onChange, direccionesCliente = [], onAgregarDireccion, is
 }
 
 // ─── Step 4: Totales y Pago ───────────────────────────────────────────────────
+/*
+ * Step4 (paso 4 de la barra, "Pago"): resumen del receptor y datos de pago.
+ * Recibe: data/onChange (estado del pedido), ordenes, precioEnvio, isEditing (pedido existente),
+ * initialPagos y onPagosChange (pagos ya registrados y aviso de cambios). onConfirmar y onCotizar se reciben
+ * pero hoy no se usan: el guardado lo disparan los botones del resumen lateral.
+ * Al crear un pedido se elige tipo y método de pago (con monto si es Anticipo); al editar se
+ * muestra el registro de pagos con el saldo pendiente.
+ */
 function Step4({ data, ordenes, onChange, onConfirmar, onCotizar, precioEnvio, isEditing, initialPagos, onPagosChange }) {
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef(null);
   const [pagos, setPagos] = useState(() => initialPagos || []);
+  // Cada cambio en la lista de pagos también se avisa a la página principal (onPagosChange) para que los guarde.
   const setPagosAndNotify = (updater) => {
     setPagos(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -3237,11 +3432,14 @@ function Step4({ data, ordenes, onChange, onConfirmar, onCotizar, precioEnvio, i
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
+  // Total = subtotal + IVA 13 % + envío; es la misma fórmula que usa el resumen lateral.
   const subtotal = ordenes.reduce((s, o) => s + o.items.reduce((ss, it) => ss + it.precio * (it.qty || 1), 0), 0);
   const total = subtotal + subtotal * 0.13 + (precioEnvio || 0);
+  // Control de pagos: lo pendiente nunca baja de 0, y con pendiente 0 el pedido queda pagado al 100 %.
   const pagado4 = pagos.reduce((s, p) => s + Number(p.monto), 0);
   const pendiente4 = Math.max(0, total - pagado4);
   const isPagado4 = pendiente4 <= 0;
+  // Valida el pago antes de registrarlo: debe tener fecha, método y un monto válido que no supere lo pendiente.
   const guardarPago4 = () => {
     if (!form4.fecha) { setPagoError('Selecciona una fecha.'); return; }
     if (!form4.metodo) { setPagoError('Selecciona un método de pago.'); return; }
@@ -3396,6 +3594,7 @@ function Step4({ data, ordenes, onChange, onConfirmar, onCotizar, precioEnvio, i
           </Box>
         </Box>
 
+        {/* Anticipo: el abono no puede superar el total del pedido; el pendiente es total − anticipo. */}
         {/* Campo monto anticipo — inline compacto */}
         {data.tipoPago === 'Anticipo' && (
           <Box sx={{ mb: '16px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -3538,6 +3737,9 @@ function Step4({ data, ordenes, onChange, onConfirmar, onCotizar, precioEnvio, i
 }
 
 // ─── Convierte lineas del mock a ordenes con items reales ─────────────────────
+// Reconstruye órdenes con productos a partir de las líneas resumidas de un pedido guardado, que solo traen
+// tipo y cantidad. Es una aproximación para poder mostrar y editar el pedido: usa los primeros productos del
+// catálogo y precios fijos (pastel $35, cupcake $3.50 c/u, accesorio $5). Devuelve [] si no hay líneas.
 function lineasToOrdenes(lineas) {
   if (!lineas?.length) return [];
   let counter = Date.now();
@@ -3582,17 +3784,29 @@ function lineasToOrdenes(lineas) {
 }
 
 // ─── Page principal ───────────────────────────────────────────────────────────
+/*
+ * NuevoPedido (componente principal): coordina los 4 pasos, guarda todo el estado del pedido y
+ * decide qué se muestra. Recibe user (usuario con sesión, de donde sale la vendedora).
+ * Provoca: guardar cotizaciones o pedidos en localStorage y navegar a la lista de pedidos; en modo
+ * edición, enviar una solicitud de cambio en lugar de guardar directo.
+ */
 export default function NuevoPedido({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // Modo edición: si la URL trae ?id=..., se abre un pedido ya guardado en lugar de uno nuevo.
   const editId = (() => { const raw = new URLSearchParams(location.search).get('id'); return raw ? decodeURIComponent(raw) : null; })();
+  // Busca el pedido entre los de ejemplo y los guardados en localStorage ('pedidos_nuevos'), aplicando
+  // primero los cambios ya aprobados (aplicarOverrides).
   const pedidoEdit = editId ? (
     aplicarOverrides([
       ...PEDIDOS_INICIALES,
       ...JSON.parse(localStorage.getItem('pedidos_nuevos') || '[]'),
     ]).find(p => p.id === editId)
   ) : null;
+  // Pagos ya registrados de ese pedido (localStorage, clave 'pagos_pedidos').
   const editPagos = editId ? (JSON.parse(localStorage.getItem('pagos_pedidos') || '{}')[editId] || []) : [];
+  // Guarda en localStorage la lista de pagos del pedido en edición cada vez que Step4 la modifica;
+  // en un pedido nuevo no hace nada (todavía no tiene id).
   const handlePagosChange = (updatedPagos) => {
     if (!editId) return;
     const all = JSON.parse(localStorage.getItem('pagos_pedidos') || '{}');
@@ -3600,23 +3814,30 @@ export default function NuevoPedido({ user }) {
     localStorage.setItem('pagos_pedidos', JSON.stringify(all));
   };
 
+  // Paso actual del asistente: 1 Cliente, 2 Entrega, 3 Pedido, 4 Pago.
   const [step, setStep] = useState(1);
+  // Órdenes del pedido: cada orden agrupa productos (Catálogo, Accesorios, personalizado, Producción...).
+  // Al editar se cargan las del pedido guardado.
   const [ordenes, setOrdenes] = useState(() => {
     if (!pedidoEdit) return [];
     if (pedidoEdit.ordenes?.length) return pedidoEdit.ordenes;
     return lineasToOrdenes(pedidoEdit.lineas);
   });
+  // Selecciones de las cuadrículas (id de producto → cantidad) para marcar lo ya agregado al pedido.
   const [selCatalogo, setSelCatalogo] = useState({});
   const [selAccesorios, setSelAccesorios] = useState({});
   const [selAccesoriosCupcakes, setSelAccesoriosCupcakes] = useState({});
   const [isCorporativo] = useState(true); // subida de imágenes de referencia siempre habilitada
+  // Se marca al elegir "Guardar como cotización y salir" en el diálogo de salida.
   const [success, setSuccess] = useState(null);
+  // Activa el aviso del resumen lateral cuando se intenta pagar sin elegir tipo y método de pago.
   const [pagoError, setPagoError] = useState(false);
   const [openSolicitud, setOpenSolicitud] = useState(0);
   const [tabStep2, setTabStep2] = useState('Catalogo');
   const [forceTabTo, setForceTabTo] = useState(null);
   const [exitDialog, setExitDialog] = useState(false); // dialog "¿salir sin guardar?"
   const [pendingNav, setPendingNav] = useState(null);  // ruta pendiente
+  // Borrador del pastel personalizado que se está armando. Vive aquí (y no en Step2) para no perderse al cambiar de paso.
   const [pastelConfig, setPastelConfig] = useState({
     tamano: null, tipoRelleno: null, tipoRelleno_p2: null,
     sabor: '', sabor_p2: '', remojo: '', remojo_p2: '', relleno: '', relleno_p2: '',
@@ -3634,6 +3855,8 @@ export default function NuevoPedido({ user }) {
     return found?.direcciones || [];
   });
 
+  // Datos de los pasos 1, 2 y 4. En modo edición se llenan con el pedido guardado; en uno nuevo se usan valores
+  // por defecto (Reserva, Domicilio y la vendedora del usuario con sesión).
   const [formData, setFormData] = useState(() => pedidoEdit ? {
     vendedor: pedidoEdit.vendedor,
     cliente: pedidoEdit.cliente,
@@ -3666,12 +3889,15 @@ export default function NuevoPedido({ user }) {
     items: (o.items || []).map(it => `${it.nombre || it.name || 'Ítem'} ×${it.qty || 1}`).sort(),
   }));
   const subtotalOrdenes = (os) => os.reduce((sum, o) => sum + (o.items || []).reduce((ss, it) => ss + (it.precio || 0) * (it.qty || 1), 0), 0);
+  // Foto inicial del pedido al abrirlo; después se compara con el estado actual para saber qué cambió.
   const [baseline] = useState(() => ({
     form: { ...formData, direccionTxt: dirTxt(formData.direccionEntrega) },
     ordenes: resumenOrdenes(ordenes),
     subtotal: subtotalOrdenes(ordenes),
   }));
 
+  // Actualiza parte de los datos del formulario. Si cambia el cliente se recargan sus direcciones, y al elegir
+  // tipo o método de pago se borra el aviso de error.
   const update = (partial) => {
     // Si cambia el cliente, actualizar las direcciones disponibles
     if (partial.cliente !== undefined) {
@@ -3683,25 +3909,38 @@ export default function NuevoPedido({ user }) {
   };
 
   // Salir seguro — si hay datos sin guardar muestra el dialog
+  // Hay datos sin guardar si ya se eligió cliente o se agregó alguna orden; en ese caso salir pide confirmación.
   const hasUnsaved = !!formData.cliente || ordenes.length > 0;
   const safeNavigate = (to) => {
     if (hasUnsaved && !success) { setPendingNav(to); setExitDialog(true); }
     else navigate(to);
   };
   const confirmExit = () => { setExitDialog(false); navigate(pendingNav || '/pedidos'); };
-  const saveAndExit = () => { setSuccess('cotizacion'); setExitDialog(false); };
+  // "Guardar como cotización y salir": guarda de verdad la cotización y va a la pantalla que se quería abrir.
+  // Si no hay nada que guardar (sin órdenes) o se está editando un pedido, solo sale.
+  const saveAndExit = () => {
+    setExitDialog(false);
+    if (editId || !ordenes.length) { navigate(pendingNav || '/pedidos'); return; }
+    handleCotizar(pendingNav || '/pedidos');
+  };
   const saveConfirmedAndExit = () => { setExitDialog(false); navigate(pendingNav || '/pedidos'); };
+  // Edición de un pedido ya confirmado (estadoPago distinto de 'Pendiente'); si sigue 'Pendiente' es una cotización.
+  // Cambia los textos del diálogo y del resumen, y oculta el botón "Pagar Pedido".
   const isConfirmedEdit = !!editId && pedidoEdit?.estadoPago !== 'Pendiente';
 
   // Confirmar / cotizar
+  // Confirma el pedido desde el paso de pago. En edición solo abre la solicitud de cambio. En un pedido nuevo
+  // exige tipo y método de pago, crea el pedido con id PED-MMAA-NNN y lo guarda en localStorage.
   const handleConfirmar = () => {
     if (editId) { setOpenSolicitud(n => n + 1); return; }
     if (!formData.tipoPago || !formData.metodoPago) { setPagoError(true); return; }
     setPagoError(false);
+    // Fecha y hora de entrega en formato ISO; si faltaran se usa el momento actual.
     const ahora = new Date().toISOString();
     const entregaISO = formData.fechaEntrega && formData.horaEntrega
       ? `${formData.fechaEntrega}T${formData.horaEntrega}:00`
       : ahora;
+    // El id se arma con el mes y año de la fecha de ENTREGA más un consecutivo (PED-MMAA-NNN).
     const mes = new Date(entregaISO).getMonth() + 1;
     const anio = String(new Date(entregaISO).getFullYear()).slice(-2);
     const previos = JSON.parse(localStorage.getItem('pedidos_nuevos') || '[]');
@@ -3726,9 +3965,12 @@ export default function NuevoPedido({ user }) {
       direccionEntrega: formData.direccionEntrega || '',
       estadoPago: formData.tipoPago || 'Pendiente',
       metodoPago: formData.metodoPago || '',
+      // Total final del pedido confirmado: subtotal + IVA 13 % + envío.
       total: (() => { const sub = ordenes.reduce((s, o) => s + (o.items || []).reduce((ss, it) => ss + (it.precio || 0) * (it.qty || 1), 0), 0); return sub + sub * 0.13 + (precioEnvio || 0); })(),
     };
     localStorage.setItem('pedidos_nuevos', JSON.stringify([...previos, nuevoPedido]));
+    // Si el pago es Anticipo, el monto se registra como primer pago del pedido (pagos_pedidos)
+    // para poder calcular después el saldo pendiente.
     if (formData.tipoPago === 'Anticipo' && formData.montoAnticipo && parseFloat(formData.montoAnticipo) > 0) {
       const pagosPrevios = JSON.parse(localStorage.getItem('pagos_pedidos') || '{}');
       pagosPrevios[nuevoPedido.id] = [{
@@ -3739,6 +3981,7 @@ export default function NuevoPedido({ user }) {
       localStorage.setItem('pagos_pedidos', JSON.stringify(pagosPrevios));
     }
     // Navegar directamente según la fecha de entrega
+    // Si la entrega cae en la semana actual (lunes a domingo) se abre la vista de gestión; si no, la vista del día de entrega.
     const feEntrega = new Date(entregaISO);
     const hoy = new Date();
     const lunes = new Date(hoy);
@@ -3753,7 +3996,10 @@ export default function NuevoPedido({ user }) {
       navigate(`/pedidos/dia/${formData.fechaEntrega}`);
     }
   };
-  const handleCotizar = () => {
+  // Guarda el pedido como COTIZACIÓN: se arma igual que en handleConfirmar pero con id COT-, estadoPago 'Pendiente'
+  // y sin método de pago. Una cotización no se produce hasta que se registre un pago. Al terminar vuelve a la lista.
+  // destino: ruta a la que ir después de guardar (solo se usa al salir desde el diálogo; los botones llaman sin argumento).
+  const handleCotizar = (destino) => {
     if (editId) { setOpenSolicitud(n => n + 1); return; }
     const ahora = new Date().toISOString();
     const entregaISO = formData.fechaEntrega && formData.horaEntrega
@@ -3782,14 +4028,18 @@ export default function NuevoPedido({ user }) {
       lugarEntrega: formData.lugarEntrega || '',
       estadoPago: 'Pendiente',
       metodoPago: '',
-      total: ordenes.reduce((s, o) => s + (o.items || []).reduce((ss, it) => ss + (it.precio || 0) * (it.qty || 1), 0), 0),
+      // Mismo cálculo que el pedido confirmado: subtotal + IVA (13 %) + envío, para que ambos totales coincidan.
+      total: (() => { const sub = ordenes.reduce((s, o) => s + (o.items || []).reduce((ss, it) => ss + (it.precio || 0) * (it.qty || 1), 0), 0); return sub + sub * 0.13 + (precioEnvio || 0); })(),
     };
     localStorage.setItem('pedidos_nuevos', JSON.stringify([...previos, nuevoPedido]));
-    navigate('/pedidos');
+    navigate(typeof destino === 'string' ? destino : '/pedidos');
   };
 
+  // Se activa al intentar avanzar con campos obligatorios vacíos, para que los pasos muestren sus mensajes de error.
   const [showErrors, setShowErrors] = useState(false);
 
+  // Reabre una orden personalizada en el configurador: la quita de la lista (se vuelve a agregar al terminar),
+  // carga su configuración y lleva a la pestaña "Personalizado" del paso 3.
   const handleEditOrden = (orden) => {
     setOrdenes(prev => prev.filter(o => o.id !== orden.id));
     const existingConfig = orden.items[0]?.pastelConfig;
@@ -3803,6 +4053,8 @@ export default function NuevoPedido({ user }) {
     if (step !== 3) setStep(3);
   };
 
+  // Validaciones por paso: 1 requiere cliente; 2 fecha, hora, lugar y (si es Domicilio) dirección;
+  // 3 al menos una orden con productos. En modo edición no se bloquea el avance.
   const canNext = () => {
     if (!!editId) return true;
     if (step === 1) return !!formData.cliente;
@@ -3811,11 +4063,13 @@ export default function NuevoPedido({ user }) {
     return true;
   };
 
+  // Avanza solo si el paso actual es válido; si no, activa los mensajes de error del paso.
   const handleNext = () => {
     if (canNext()) { setShowErrors(false); setStep(s => s + 1); }
     else setShowErrors(true);
   };
 
+  // Quita un producto de una orden. Si la orden queda vacía se elimina y el producto se desmarca en la cuadrícula.
   const removeItem = (ordenId, itemIdx) => {
     // Deseleccionar el producto en el grid izquierdo
     setOrdenes(prev => {
@@ -3846,6 +4100,8 @@ export default function NuevoPedido({ user }) {
     });
   };
 
+  // Cambia la cantidad de un producto (mínimo 1) y reconstruye las selecciones de catálogo y accesorios
+  // para que los contadores de las tarjetas coincidan con las órdenes.
   const changeQty = (ordenId, itemIdx, delta) => {
     setOrdenes(prev => {
       const next = prev.map(o => {
@@ -3877,6 +4133,7 @@ export default function NuevoPedido({ user }) {
     });
   };
 
+  // Elimina una orden completa y descuenta sus productos de las selecciones de la cuadrícula.
   const removeOrden = (ordenId) => {
     setOrdenes(prev => {
       const orden = prev.find(o => o.id === ordenId);
@@ -3902,6 +4159,9 @@ export default function NuevoPedido({ user }) {
     });
   };
 
+  // División stock / producción (pedido Mixto): si en "En stock" se indican menos unidades que las pedidas,
+  // la línea original queda con la cantidad en stock y la diferencia pasa a una única orden de "Producción"
+  // (se crea si no existe, o se suma al mismo producto si ya estaba). El resumen detecta esa orden y muestra "Mixto".
   const splitStock = (ordenId, itemIdx, stockDisp, confirmar = false) => {
     setOrdenes(prev => {
       const orden = prev.find(o => o.id === ordenId);
@@ -3953,6 +4213,7 @@ export default function NuevoPedido({ user }) {
     });
   };
 
+  // Guarda la dedicatoria de un pastel. Con varias unidades se mantiene un arreglo (una por unidad) ajustado a la cantidad.
   const changeDedicatoria = (ordenId, itemIdx, val, unitIdx) => {
     setOrdenes(prev => prev.map(o => {
       if (o.id !== ordenId) return o;
@@ -3968,6 +4229,7 @@ export default function NuevoPedido({ user }) {
     }));
   };
 
+  // Textos cortos de entrega y dirección para el encabezado del resumen lateral.
   const entregaResumen = formData.fechaEntrega
     ? `${formData.lugarEntrega} · ${formData.fechaEntrega} ${formData.horaEntrega}`
     : '';
@@ -3977,6 +4239,7 @@ export default function NuevoPedido({ user }) {
         : formData.direccionEntrega)
     : '';
 
+  // Costo de envío por zona: solo aplica a Domicilio y sale del departamento de la dirección elegida (ZONAS_ENVIO); si no, es 0.
   const precioEnvio = (() => {
     if (formData.lugarEntrega !== 'Domicilio' || !formData.direccionEntrega) return 0;
     const dep = typeof formData.direccionEntrega === 'object' ? formData.direccionEntrega.departamento : null;
@@ -3984,6 +4247,7 @@ export default function NuevoPedido({ user }) {
   })();
 
   // ── Modo edición: cambios detectados contra la línea base ─────────────────
+  // Compara el formulario y las órdenes actuales contra la línea base y arma la lista de cambios (campo, antes, después).
   const cambiosPedido = (() => {
     if (!editId || !pedidoEdit) return [];
     const out = [];
@@ -4005,9 +4269,12 @@ export default function NuevoPedido({ user }) {
     }
     return out;
   })();
+  // Nuevo total estimado al editar: total anterior más la diferencia de subtotal con IVA (13 %).
   const totalAntesEdit = pedidoEdit?.total || 0;
   const totalDespuesEdit = Math.round((totalAntesEdit + (subtotalOrdenes(ordenes) - baseline.subtotal) * 1.13) * 100) / 100;
   const historialEdit = editId && pedidoEdit ? getHistorialPedido(pedidoEdit) : [];
+  // En modo edición los cambios no se aplican directo: se crea una solicitud de cambio (motivo, cambios y totales)
+  // que se envía a Producción.
   const enviarSolicitud = (motivo) => {
     const entregaISO = formData.fechaEntrega && formData.horaEntrega ? `${formData.fechaEntrega}T${formData.horaEntrega}:00` : pedidoEdit.entrega;
     crearSolicitud({
@@ -4031,6 +4298,7 @@ export default function NuevoPedido({ user }) {
     navigate('/produccion/solicitudes');
   };
 
+  // El resumen lateral aparece desde el paso 3 (Pedido); en modo edición se ve desde el paso 1.
   const mostrarSidebar = step >= 3 || (!!editId && step >= 1);
   // Solo bloquea el pago si el usuario está configurando un pastel Y ya eligió tamaño (hay config activa sin guardar)
   const pastelEnProceso = step === 3 && tabStep2 === 'Pastel Personalizado' && !!pastelConfig.tamano;
@@ -4085,6 +4353,7 @@ export default function NuevoPedido({ user }) {
       <Box sx={{ display: 'flex', gap: '20px', alignItems: 'stretch', minHeight: 'calc(100vh - 200px)' }}>
         {/* Main content */}
         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', ...(step === 3 ? { alignSelf: 'flex-start' } : {}) }}>
+          {/* Cada paso se dibuja según 'step'. Recordar: Step3 es el paso 2 (Entrega) y Step2 es el paso 3 (Pedido). */}
           {step === 1 && <Step1 data={formData} onChange={update} isEditing={!!editId} showErrors={showErrors} />}
           {step === 2 && <Step3 data={formData} onChange={update}
             direccionesCliente={clienteDirecciones}

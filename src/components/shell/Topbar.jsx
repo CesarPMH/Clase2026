@@ -1,4 +1,9 @@
-// Component library: MUI
+// ─── Topbar ────────────────────────────────────────────────────────────────────
+// Barra superior fija de la aplicación. Contiene el botón de menú (solo en celular),
+// el nombre "Punto Cero" que lleva al inicio, el cambio de idioma, la ayuda, las
+// notificaciones y el menú de la persona usuaria (con el cierre de sesión).
+// La ve todo el personal que inicia sesión, en todas las pantallas.
+// Librería de componentes: MUI.
 import { useState } from 'react';
 import {
   Box, Typography, Menu, MenuItem, Divider, Avatar, Tooltip,
@@ -11,10 +16,16 @@ import {
 import { DL } from '../../theme';
 import { useT } from '../../i18n/LanguageContext';
 
+// Objetivo: dibujar la barra superior y manejar su menú de usuario.
+// Props: user (usuario con sesión: name, role, email, initials), onLogout (cierra la sesión),
+// onMenuToggle (abre/cierra el menú lateral; lo usa el botón hamburguesa).
+// Devuelve: la barra fija de 45 px de alto.
 export default function Topbar({ user, onLogout, onMenuToggle }) {
+  // anchorEl guarda el elemento sobre el que se abre el menú de usuario (null = menú cerrado).
   const [anchorEl, setAnchorEl] = useState(null);
   const { t, lang, toggleLang } = useT();
 
+  // Iniciales para el avatar: usa las que traiga el usuario; si no, las calcula con la primera letra de las dos primeras palabras del nombre.
   const initials = user?.initials || (user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : 'SK');
@@ -31,7 +42,7 @@ export default function Topbar({ user, onLogout, onMenuToggle }) {
       borderBottom: '1px solid #e3e3e3',
     }}>
 
-      {/* ── Mobile hamburger (visible only on mobile) ── */}
+      {/* Botón de menú: solo existe en celular, donde el menú lateral se abre como panel; en escritorio el menú ya está visible. */}
       <Box
         onClick={onMenuToggle}
         sx={{
@@ -45,7 +56,9 @@ export default function Topbar({ user, onLogout, onMenuToggle }) {
         <MenuIcon sx={{ fontSize: 18 }} />
       </Box>
 
-      {/* ── Left: logo + divider + company name ── */}
+      {/* ── Izquierda: nombre de la empresa. Al hacer clic vuelve al inicio ("/").
+          Por qué así: se cambia el historial del navegador y se lanza un evento popstate
+          para que React Router detecte el cambio sin usar useNavigate aquí. ── */}
       <Box
         onClick={() => { window.history.pushState({}, '', '/'); window.dispatchEvent(new PopStateEvent('popstate')); }}
         sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, cursor: 'pointer', userSelect: 'none' }}
@@ -63,7 +76,7 @@ export default function Topbar({ user, onLogout, onMenuToggle }) {
         </Typography>
       </Box>
 
-      {/* ── Right controls ── */}
+      {/* Controles de la derecha. En pantallas pequeñas se ocultan textos (ayuda, nombre/rol) para que todo quepa. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
 
         {/* Language toggle */}
@@ -119,7 +132,7 @@ export default function Topbar({ user, onLogout, onMenuToggle }) {
           </Box>
         </Tooltip>
 
-        {/* User / Avatar */}
+        {/* Al hacer clic se abre el menú desplegable (ver "User dropdown" más abajo). */}
         <Box
           onClick={(e) => setAnchorEl(e.currentTarget)}
           sx={{

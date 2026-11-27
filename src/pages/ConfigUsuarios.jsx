@@ -1,5 +1,8 @@
 // ─── Configuración › Usuarios ───────────────────────────────────────────────────
 // Se pueden agregar, editar y quitar usuarios del sistema.
+// Reglas de validación: el correo debe ser único, la contraseña debe tener al menos 6 caracteres
+// y nunca se puede dejar al sistema sin administrador (ni quitando ni cambiando de rol al único).
+// Guarda con data/configuracion.js (getUsuarios / saveUsuarios) y usa las piezas de ConfigUI.jsx.
 import { useState, useMemo } from 'react';
 import { Box, Typography, TextField, InputAdornment } from '@mui/material';
 import { Search as SearchIcon, Visibility as VerIcon, VisibilityOff as NoVerIcon } from '@mui/icons-material';
@@ -8,10 +11,15 @@ import PageHeader, { MiniSelect } from '../components/common/PageHeader';
 import { getUsuarios, saveUsuarios, nuevoIdUsuario, ROLES, SUCURSALES } from '../data/configuracion';
 import { BotonIcono, IconoMas, MenuAcciones, ConfigShell, F, th, td, BtnOutline, Card, TableWrap, Etiqueta, Campo, inputSx, Dialogo, Confirmar } from '../components/common/ConfigUI';
 
+// Valores iniciales del formulario para un usuario nuevo (rol Vendedor y la primera sucursal de la lista).
 const VACIO = { nombre: '', email: '', password: '', rol: 'Vendedor', sucursal: SUCURSALES[1] };
+// Color de la etiqueta de rol en la tabla: así se distingue de un vistazo quién es administrador o de producción.
 const colorRol = (r) => (r === 'Administrador' ? DL.navy : r === 'Producción' ? DL.yellow : DL.tM);
 
+// ConfigUsuarios: pantalla para administrar los usuarios del sistema (listar, filtrar por rol,
+// buscar, agregar, editar y quitar). No recibe props.
 export default function ConfigUsuarios() {
+  // Estados: lista de usuarios, filtros, formulario abierto (null = cerrado), id en edición, errores y aviso general.
   const [lista, setLista] = useState(() => getUsuarios());
   const [search, setSearch] = useState('');
   const [rol, setRol] = useState('');
@@ -22,18 +30,29 @@ export default function ConfigUsuarios() {
   const [aviso, setAviso] = useState('');
   const [verPass, setVerPass] = useState(true);
 
+  // rows: usuarios filtrados por rol y por texto (nombre o correo).
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     return lista.filter(u => (!rol || u.rol === rol) && (!q || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
   }, [lista, search, rol]);
 
+  // Abre el diálogo vacío para crear un usuario.
   const abrirNuevo = () => { setEditId(null); setForm({ ...VACIO }); setErrores({}); setVerPass(true); };
+  // Abre el diálogo con los datos del usuario elegido.
   const abrirEditar = (u) => { setEditId(u.id); setForm({ nombre: u.nombre, email: u.email, password: u.password || '', rol: u.rol, sucursal: u.sucursal }); setErrores({}); setVerPass(true); };
   const set = (p) => setForm(f => ({ ...f, ...p }));
 
+  // Control del único administrador: se cuentan los administradores y esUltimoAdmin dice si este
+  // usuario es el último. Se usa al guardar y al quitar para que el sistema nunca se quede sin uno.
   const admins = lista.filter(u => u.rol === 'Administrador').length;
   const esUltimoAdmin = (u) => u.rol === 'Administrador' && admins <= 1;
 
+  // guardar: valida y guarda el usuario. Reglas:
+  //  - nombre obligatorio; correo obligatorio, con formato válido y único (se compara sin
+  //    distinguir mayúsculas e ignorando al propio usuario cuando se edita);
+  //  - contraseña obligatoria y de mínimo 6 caracteres;
+  //  - no se puede cambiar de rol al único administrador.
+  // Si hay errores se muestran en cada campo y no se guarda nada.
   const guardar = () => {
     const e = {};
     if (!form.nombre.trim()) e.nombre = 'El nombre es obligatorio.';
@@ -46,12 +65,16 @@ export default function ConfigUsuarios() {
     if (actual && esUltimoAdmin(actual) && form.rol !== 'Administrador') e.rol = 'Debe quedar al menos un administrador.';
     setErrores(e);
     if (Object.keys(e).length) return;
+    // Objeto final del usuario. En una edición se conserva la fecha de creación original.
     const u = { id: editId ?? nuevoIdUsuario(lista), nombre: form.nombre.trim(), email: form.email.trim(), password: form.password, rol: form.rol, sucursal: form.sucursal, creado: actual?.creado || new Date().toISOString().slice(0, 10) };
     setLista(saveUsuarios(editId == null ? [...lista, u] : lista.map(x => (x.id === editId ? u : x))));
     setForm(null);
   };
 
+  // quitar: elimina al usuario confirmado y guarda la lista.
   const quitar = () => { setLista(saveUsuarios(lista.filter(u => u.id !== borrar.id))); setBorrar(null); };
+  // pedirQuitar: primero revisa que no sea el único administrador; si lo es, muestra un aviso y no
+  // abre la confirmación. Si no, pide confirmar.
   const pedirQuitar = (u) => {
     if (esUltimoAdmin(u)) { setAviso('No se puede quitar al único administrador del sistema.'); return; }
     setAviso(''); setBorrar(u);
@@ -60,6 +83,7 @@ export default function ConfigUsuarios() {
   return (
     <ConfigShell>
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', background: DL.bg, overflow: 'hidden' }}>
+      {/* Encabezado con el filtro por rol. */}
       <PageHeader title="Usuarios" live={false} showShare={false}>
         <MiniSelect label="Rol" value={rol} onChange={setRol} minWidth={130}
           options={[{ value: '', label: 'Todos' }, ...ROLES.map(r => ({ value: r, label: r }))]} />
@@ -80,6 +104,7 @@ export default function ConfigUsuarios() {
             </Box>
           )}
 
+          {/* Tabla de usuarios. */}
           <TableWrap minWidth={760}>
             <thead><tr>{['Usuario', 'Correo', 'Rol', 'Sucursal', 'Creado', 'Acciones'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
@@ -104,6 +129,7 @@ export default function ConfigUsuarios() {
         </Card>
       </Box>
 
+      {/* Diálogo para agregar o editar. El mensaje de la contraseña aclara que es solo de ejemplo. */}
       <Dialogo abierto={!!form} onCerrar={() => setForm(null)}
         titulo={editId == null ? 'Agregar usuario' : 'Editar usuario'}
         subtitulo="El rol define lo que la persona puede hacer en el sistema."
@@ -143,6 +169,7 @@ export default function ConfigUsuarios() {
         )}
       </Dialogo>
 
+      {/* Confirmación antes de quitar al usuario. */}
       <Confirmar abierto={!!borrar} onCerrar={() => setBorrar(null)} onConfirmar={quitar} textoBoton="Quitar"
         titulo="Quitar usuario" texto={borrar ? `${borrar.nombre} ya no podrá entrar al sistema.` : ''} />
     </Box>

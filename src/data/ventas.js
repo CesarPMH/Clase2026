@@ -1,9 +1,33 @@
 // ─── Ventas Dashboard — Demo Data (Bom Bom) ───────────────────────────────────
+// IMPORTANTE (datos de demostración): todo lo que hay en este archivo está escrito a mano para
+// probar y mostrar el diseño del dashboard de Ventas. NO viene de los pedidos reales de la aplicación
+// (PEDIDOS_INICIALES / localStorage) ni de una base de datos; las cifras, clientes, facturas y
+// fechas son inventados o ejemplos, y por eso algunas no cuadran entre sí (ej. totales de
+// VPOR_DATA vs. KPI). Solo lo consume la pantalla pages/Ventas.jsx.
+// Cuando exista una fuente real, estas constantes se reemplazarían manteniendo la misma estructura:
+//   MESES          Nombres cortos de los 12 meses.
+//   VENTAS_HIST    Ventas para la gráfica de barras. Primero por "split" (general | categoria) y luego
+//                  por granularidad (mes | trim). Cada uno tiene labels (eje X), datasets
+//                  [{ label, data[], color }] (null = sin dato aún) y budget (línea de presupuesto, o null).
+//                  Los valores están en miles de dólares (K).
+//   VPOR_DATA      Tabla "Ventas por", una lista por entidad (producto, categoria, canal, vendedor,
+//                  region, cliente). Cada fila: name, v (venta actual, miles $), prev (año anterior),
+//                  part (% de participación), mg (% de margen), vsAnt (% de variación vs año anterior).
+//   INV_DATA       Facturas de ejemplo (una por elemento) con cliente, canal, vendedor, fechas, montos
+//                  en dólares (v, costo, abono, pend), margen mg, si está pagada (pago), nota de crédito
+//                  (nc, nc_monto) y sus líneas de producto (lines).
+//   VENTAS_KPIS    Los 7 indicadores de las tarjetas: valor, meta, % de cumplimiento (pct), diferencias
+//                  y comparación con el año anterior, color de acento y símbolo.
+//   VENTAS_ALERTS  Alertas de ejemplo; type: r = crítica, y = advertencia, g = positiva.
+//   DONUT_DATA     Participación por categoría para una gráfica de dona (hoy Ventas.jsx no la usa).
+//   INV_COLS_CFG   Configuración de las columnas de la tabla de facturas (visibles, fijas, centradas).
 
+// Nombres cortos de los meses (para etiquetas).
 export const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-// Historical ventas grouped bar chart data
+// Ventas históricas para la gráfica de barras agrupadas. Estructura: VENTAS_HIST[split][granularidad] (ver cabecera). Valores en miles de dólares.
 export const VENTAS_HIST = {
+  // Vista "general": compara el mismo conjunto por año. 2026 Proy. son meses proyectados (aún sin datos reales del año).
   general: {
     mes: {
       labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
@@ -23,6 +47,7 @@ export const VENTAS_HIST = {
       budget: [3260,3860,4360,4720],
     },
   },
+  // Vista "categoria": las barras se dividen por categoría de producto; hay datos hasta julio y budget es null (sin línea de presupuesto).
   categoria: {
     mes: {
       labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
@@ -37,7 +62,7 @@ export const VENTAS_HIST = {
   },
 };
 
-// Ventas por (producto/categoría/canal/vendedor/región/cliente) — horizontal bar + table
+// Tabla "Ventas por": una lista de filas por entidad. v y prev en miles de dólares; part, mg y vsAnt en porcentaje.
 export const VPOR_DATA = {
   producto: [
     { name:'AGROVIT PLUS 1L',  v:284, prev:261, part:18.2, mg:24.3, vsAnt:8.7   },
@@ -90,7 +115,7 @@ export const VPOR_DATA = {
   ],
 };
 
-// Invoice / factura data
+// Facturas de ejemplo. Los campos terminados en Full son el nombre completo; "cli" y "vend" son versiones cortas para la tabla. pend = v - abono.
 export const INV_DATA = [
   { fac:'FV-2025-0043', nc:false, nc_monto:null, nofac:'001-001-0000043', cli:'Bom Bom Agro S.A.', cliFull:'Bom Bom Agro S.A.', canal:'Tienda Central', vend:'D. Guerra', vendFull:'David Guerra', condpago:'30 días', tipo:'Crédito', fecha:'25/07/2025', vence:'24/08/2025', qty:38, v:12450, costo:9430, mg:24.3, abono:12450, pend:0, pago:true,
     lines:[{prod:'AGROVIT PLUS 1L',sku:'AGR-001',qty:12,pu:480,tot:5760,costo:4360,mg:24.3},{prod:'VETMEC COMBO',sku:'VET-012',qty:8,pu:612,tot:4896,costo:3370,mg:31.2},{prod:'NUTRISEM PRO',sku:'NUT-007',qty:3,pu:598,tot:1794,costo:1280,mg:28.7}]},
@@ -114,7 +139,7 @@ export const INV_DATA = [
     lines:[{prod:'CALCIVIT INY',sku:'CAL-003',qty:8,pu:320,tot:2560,costo:1680,mg:34.4},{prod:'BIOMAX TABS',sku:'BIO-008',qty:6,pu:298,tot:1788,costo:1180,mg:34.0}]},
 ];
 
-// KPI cards — matches screenshot exactly
+// Indicadores de las tarjetas. pct = cumplimiento de la meta; metaDelta/delta son textos ya formateados; accentColor define el color del panel de detalle.
 export const VENTAS_KPIS = [
   { id:'ventas',   label:'Ventas Totales',  value:'$1.56M', metaLabel:'Presupuesto', meta:'$1.50M', pct:104.1, metaDelta:'+$64K',   metaDeltaUp:true,  delta:'+12.3%', deltaUp:true,  yoy:'vs Año Ant. $1.39M', accentColor:'#16a34a', badgeIcon:'✓' },
   { id:'margen',   label:'Margen Bruto',    value:'18.1%',  metaLabel:'Umbral Mín.', meta:'25.0%',  pct:72.4,  metaDelta:'-6.9pp',  metaDeltaUp:false, delta:'-3.3pp', deltaUp:false, yoy:'vs Año Ant. 21.4%',  accentColor:'#dc2626', badgeIcon:'!' },
@@ -125,7 +150,7 @@ export const VENTAS_KPIS = [
   { id:'abandon',  label:'Abandonados',     value:'6',      metaLabel:'Umbral Máx.', meta:'5',      pct:120.0, metaDelta:null,      metaDeltaUp:false, delta:'-33%',   deltaUp:true,  yoy:'vs Año Ant. 9',      accentColor:'#d97706', badgeIcon:'!' },
 ];
 
-// Alerts — matches screenshot exactly
+// Alertas de ejemplo para el panel "Alertas de Sistema".
 export const VENTAS_ALERTS = [
   { type:'r', msg:'Margen bruto 18.1% — bajo umbral mínimo 25%' },
   { type:'r', msg:'PILAROUND con margen negativo -0.7% — revisar precio' },
@@ -136,7 +161,7 @@ export const VENTAS_ALERTS = [
   { type:'g', msg:'43 facturas emitidas · 107.5% de meta' },
 ];
 
-// Donut chart data
+// Participación (%) por categoría para una gráfica de dona; color de cada porción incluido.
 export const DONUT_DATA = [
   { value:39.2, name:'Agrícola',     color:'#547e69' },
   { value:31.9, name:'Veterinario',  color:'#1a1a1a' },
@@ -144,7 +169,7 @@ export const DONUT_DATA = [
   { value:10.4, name:'Esp. Menores', color:'#b8b8b8' },
 ];
 
-// Column config — visibility matches screenshot (fac, cli, nofac, fecha, vence, qty, v, nc, costo, mg, abono, pend visible)
+// Columnas de la tabla de facturas: vis = se ve al inicio, fixed = no se puede ocultar, center = texto centrado.
 export const INV_COLS_CFG = [
   { key:'fac',      label:'ID Factura',  fixed:true,  vis:true,  center:false },
   { key:'cli',      label:'Cliente',     fixed:true,  vis:true,  center:false },

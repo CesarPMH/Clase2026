@@ -1,4 +1,12 @@
 // Panel superior del modo "editar pedido": historial de cambios + envío de solicitud
+//
+// Qué hace: se muestra arriba del formulario cuando se edita un pedido ya existente.
+// Cuenta los cambios detectados, deja enviar la solicitud (con motivo obligatorio)
+// y muestra el historial del pedido (creación + solicitudes anteriores).
+// De dónde salen los datos: todo llega por props desde la página del formulario
+// (pedido, historial, cambios); la información original viene de data/solicitudesCambio.js.
+// Quién lo usa: pages/NuevoPedido.jsx (modo edición). Además exporta pequeños
+// componentes de apoyo que reutiliza pages/SolicitudesCambio.jsx.
 import { useState, useEffect } from 'react';
 import { Box, Typography, Dialog, DialogContent } from '@mui/material';
 import { DL } from '../../theme';
@@ -6,6 +14,7 @@ import { DL } from '../../theme';
 const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 const SERIF = "'Crimson Pro','Cormorant Garamond',Georgia,serif";
 
+// Convierte una fecha ISO a texto "dd/mm/aaaa · hh:mm"; devuelve '—' si la fecha no es válida.
 export const fmtFechaHora = (iso) => {
   const d = new Date(iso);
   if (isNaN(d)) return '—';
@@ -13,9 +22,12 @@ export const fmtFechaHora = (iso) => {
     + ' · ' + d.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit' });
 };
 
+// Color de cada estado de solicitud: verde aprobada, rojo rechazada, amarillo pendiente.
 export const estadoColor = (estado) =>
   estado === 'Aprobada' ? DL.green : estado === 'Rechazada' ? DL.red : DL.yellow;
 
+// OBJETIVO: mostrar el estado de una solicitud como un punto de color + texto.
+// Recibe el estado ('Pendiente' | 'Aprobada' | 'Rechazada'); devuelve el indicador.
 export function EstadoSolicitud({ estado }) {
   const c = estadoColor(estado);
   return (
@@ -26,6 +38,9 @@ export function EstadoSolicitud({ estado }) {
   );
 }
 
+// OBJETIVO: listar los cambios de una solicitud con el formato "Campo: antes → después".
+// Recibe "cambios" (arreglo de {campo, antes, despues}) y "dense" para un espaciado
+// más compacto (se usa en el historial). Si no hay cambios no dibuja nada.
 export function ListaCambios({ cambios, dense }) {
   if (!cambios?.length) return null;
   return (
@@ -33,6 +48,7 @@ export function ListaCambios({ cambios, dense }) {
       {cambios.map((c, i) => (
         <Typography key={i} sx={{ fontSize: 11, color: DL.tM, fontFamily: F, lineHeight: 1.45 }}>
           <Box component="span" sx={{ fontWeight: 500, color: DL.tH }}>{c.campo}:</Box>{' '}
+          {/* El valor anterior se tacha, salvo que no existiera ('—') */}
           <Box component="span" sx={{ color: DL.tS, textDecoration: c.antes && c.antes !== '—' ? 'line-through' : 'none' }}>{c.antes}</Box>
           {' → '}
           <Box component="span" sx={{ color: DL.tH }}>{c.despues}</Box>
@@ -42,14 +58,23 @@ export function ListaCambios({ cambios, dense }) {
   );
 }
 
+// OBJETIVO: dar el primer paso del flujo de cambio de un pedido (crear solicitud).
+// Recibe: pedido (el que se edita), historial (eventos ya ordenados), cambios
+// (diferencias detectadas contra el original), onEnviar(motivo) (lo ejecuta el
+// padre para crear la solicitud) y openSignal (contador que, al cambiar, abre
+// el diálogo desde fuera, p. ej. con un botón "Guardar" de la página).
+// Devuelve el panel con cabecera, historial plegable y diálogo de envío.
 export default function EdicionPedidoPanel({ pedido, historial, cambios, onEnviar, openSignal }) {
-  const [abierto, setAbierto] = useState(true);
-  const [dialogo, setDialogo] = useState(false);
+  const [abierto, setAbierto] = useState(true);       // historial desplegado
+  const [dialogo, setDialogo] = useState(false);      // diálogo de envío visible
   const [motivo, setMotivo] = useState('');
   const [errorMotivo, setErrorMotivo] = useState(false);
   const n = cambios.length;
+  // Solo abre el diálogo si hay al menos un cambio; sin cambios no hay nada que solicitar
   useEffect(() => { if (openSignal && n) setDialogo(true); }, [openSignal]); // eslint-disable-line
 
+  // Regla: el motivo es obligatorio. Si está vacío se marca el error y no se envía;
+  // la solicitud queda 'Pendiente' hasta que alguien la apruebe o rechace.
   const enviar = () => {
     if (!motivo.trim()) { setErrorMotivo(true); return; }
     onEnviar(motivo.trim());
@@ -58,7 +83,7 @@ export default function EdicionPedidoPanel({ pedido, historial, cambios, onEnvia
 
   return (
     <Box sx={{ background: '#fff', border: `1px solid ${DL.border}`, borderRadius: '12px', mb: '20px', overflow: 'hidden' }}>
-      {/* Cabecera */}
+      {/* Cabecera: título, contador de cambios y botón de envío (deshabilitado si no hay cambios) */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', px: '20px', py: '14px', flexWrap: 'wrap' }}>
         <Box sx={{ flex: 1, minWidth: 220 }}>
           <Typography sx={{ fontFamily: SERIF, fontWeight: 300, fontSize: 24, lineHeight: 1.1, color: DL.tH }}>
@@ -82,7 +107,7 @@ export default function EdicionPedidoPanel({ pedido, historial, cambios, onEnvia
         </Box>
       </Box>
 
-      {/* Historial */}
+      {/* Historial: línea de tiempo con la creación del pedido y cada solicitud (con su resolución si ya la tiene) */}
       <Box sx={{ borderTop: `1px solid ${DL.border}` }}>
         <Box onClick={() => setAbierto(o => !o)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: '20px', py: '10px', cursor: 'pointer', '&:hover': { background: '#fafafa' } }}>
           <Typography sx={{ fontSize: 12, fontWeight: 500, color: DL.tH, fontFamily: F }}>
@@ -118,7 +143,7 @@ export default function EdicionPedidoPanel({ pedido, historial, cambios, onEnvia
         )}
       </Box>
 
-      {/* Diálogo de envío */}
+      {/* Diálogo de envío: resume los cambios y pide el motivo (obligatorio) */}
       <Dialog open={dialogo} onClose={() => setDialogo(false)} maxWidth="sm" fullWidth
         slotProps={{ paper: { sx: { borderRadius: '12px', border: `1px solid ${DL.border}` } } }}>
         <DialogContent sx={{ p: '26px 28px 22px' }}>

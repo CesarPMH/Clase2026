@@ -1,3 +1,18 @@
+// ─── Pedidos ────────────────────────────────────────────────────────────────────
+// Qué hace: pantalla principal de pedidos. Según el parámetro de la URL "?vista="
+// muestra una de tres vistas:
+//   - cotizados  (por defecto): "Registro de Pedidos", solo cotizaciones.
+//   - gestion: "Gestión de Pedidos", resumen y tabla de la semana actual.
+//   - calendario: "Calendario de Pedidos", con conteo de pedidos por día.
+// De dónde salen los datos: PEDIDOS_INICIALES (pedidosMock) + los pedidos nuevos
+// guardados en localStorage ('pedidos_nuevos'), con los cambios aprobados de
+// solicitudes de cambio aplicados encima (aplicarOverrides).
+// Quién lo usa: App.jsx la monta en la ruta '/pedidos'; el Sidebar (y Home) eligen
+// la vista con "?vista=". Desde el calendario se navega a PedidosDia.jsx.
+//
+// Concepto clave: una COTIZACIÓN es un pedido con estadoPago 'Pendiente'; todavía
+// no tiene pago registrado y por eso no se produce. Al registrarse el pago pasa a
+// ser un pedido CONFIRMADO y recién ahí aparece en la gestión y el calendario.
 import { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -18,6 +33,9 @@ import TablaPedidos, { ColsButton, DEFAULT_COLS_VISIBLES } from '../components/c
 const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
 // ─── helper: detectar tipos de orden en un pedido ────────────────────────────
+// OBJETIVO: saber si un pedido tiene al menos una línea del tipo de orden elegido
+// en el filtro. Recibe el pedido y el filtro ('' = sin filtro); devuelve true/false.
+// "Personalizado" del filtro equivale al tipo 'Pastel Personalizado' de las líneas.
 function pedidoTieneOrden(p, tipoOrden) {
   if (!tipoOrden) return true;
   const tipos = (p.lineas || []).map(l => l.tipo);
@@ -28,6 +46,11 @@ function pedidoTieneOrden(p, tipoOrden) {
 }
 
 // ─── Controles filtro ─────────────────────────────────────────────────────────
+// OBJETIVO: barra con los filtros (tipo pedido, orden, pago, vendedor, cliente),
+// descarga, buscador y botón de pedido nuevo. Recibe cada valor de filtro con su
+// función "on..." para cambiarlo; no guarda estado propio. Devuelve la barra.
+// Nota: actualmente la página muestra estos filtros en el PageHeader, así que
+// este componente queda como alternativa sin uso.
 function Controles({ search, onSearch, vendedor, onVendedor, tipoCliente, onTipo, vendedores,
   tipoPedido, onTipoPedido, tipoOrden, onTipoOrden, estadoPago, onEstadoPago, estadosPago,
   onNuevo, showDownload }) {
@@ -75,11 +98,16 @@ function Controles({ search, onSearch, vendedor, onVendedor, tipoCliente, onTipo
 }
 
 // ─── Vista Cotizados ──────────────────────────────────────────────────────────
+// OBJETIVO: listar las cotizaciones (pedidos sin pago registrado) de un mes y año.
+// Recibe todos los pedidos, los valores de filtro elegidos en el encabezado y
+// las funciones para editar o crear un pedido. Devuelve la tarjeta con la tabla.
 function VistaCotizados({ pedidos, onEdit, onNuevo, mesSeleccionado, anioSeleccionado,
   search, onSearch, vendedor, onVendedor, tipo, onTipo,
   tipoPedido, onTipoPedido, tipoOrden, onTipoOrden, estadoPago, onEstadoPago,
   vendedores, estadosPago }) {
   const [colsVisibles, setColsVisibles] = useState(DEFAULT_COLS_VISIBLES);
+  // Primer filtro: mes y año de REGISTRO del pedido (cuándo se cotizó, no cuándo
+  // se entrega). Si falta mes o año, ese criterio no filtra.
   const pedidosMes = useMemo(() => {
     const m = mesSeleccionado ? Number(mesSeleccionado) : null;
     const a = anioSeleccionado ? Number(anioSeleccionado) : null;
@@ -89,8 +117,11 @@ function VistaCotizados({ pedidos, onEdit, onNuevo, mesSeleccionado, anioSelecci
     });
   }, [pedidos, mesSeleccionado, anioSeleccionado]);
 
+  // Cotizados = estadoPago 'Pendiente'. Los que ya tienen pago son pedidos confirmados
+  // y se ven en las vistas de gestión y calendario.
   const cotizados = pedidosMes.filter(p => p.estadoPago === 'Pendiente');
 
+  // Segundo filtro: búsqueda por cliente o id, más los selectores del encabezado
   const rows = useMemo(() => cotizados.filter(p => {
     const q = (search || '').toLowerCase();
     return (!q || p.cliente.nombre.toLowerCase().includes(q) || String(p.id).includes(q))
@@ -132,10 +163,17 @@ function VistaCotizados({ pedidos, onEdit, onNuevo, mesSeleccionado, anioSelecci
 }
 
 // ─── Vista Gestión ────────────────────────────────────────────────────────────
+// OBJETIVO: dar al equipo un resumen de la semana en curso (lunes a domingo):
+// cuántos pedidos son reserva o producción, cuántos están confirmados y cuántos
+// siguen cotizados, más la tabla con el detalle. Recibe los pedidos y los filtros;
+// devuelve las tarjetas de resumen y la tabla.
 function VistaGestion({ pedidos, onNuevo, onEdit,
   search, onSearch, vendedor, tipo, tipoPedido, tipoOrden, estadoPago }) {
   const [colsVisibles, setColsVisibles] = useState(DEFAULT_COLS_VISIBLES);
 
+  // Pedidos cuya fecha de entrega cae en la semana actual. La semana empieza en
+  // lunes: getDay() devuelve 0 para domingo, por eso se usa (día + 6) % 7 para
+  // saber cuántos días retroceder hasta el lunes.
   const pedidosSemana = useMemo(() => {
     const hoy = new Date();
     const lunes = new Date(hoy);
@@ -150,11 +188,15 @@ function VistaGestion({ pedidos, onNuevo, onEdit,
     });
   }, [pedidos]);
 
+  // Confirmados (con pago registrado) frente a cotizados (pago 'Pendiente'): son los
+  // números de las dos últimas tarjetas de resumen.
   const confirmados = pedidosSemana.filter(p => p.estadoPago !== 'Pendiente');
   const cotizados   = pedidosSemana.filter(p => p.estadoPago === 'Pendiente');
   const reservas    = pedidosSemana.filter(p => p.tipoPedido === 'Reserva').length;
   const produccion  = pedidosSemana.filter(p => p.tipoPedido === 'Producción').length;
 
+  // Filas de la tabla: pedidos de la semana (confirmados y cotizados) filtrados por
+  // búsqueda y selectores del encabezado
   const rows = useMemo(() => pedidosSemana.filter(p => {
     const q = (search || '').toLowerCase();
     return (!q || p.cliente.nombre.toLowerCase().includes(q) || String(p.id).includes(q))
@@ -167,6 +209,7 @@ function VistaGestion({ pedidos, onNuevo, onEdit,
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Tarjetas de resumen (KPIs) de la semana: reserva, producción, confirmados, cotizados */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
         {[
           { icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke={DL.navy} strokeWidth="2"/><path d="M3 9h18" stroke={DL.navy} strokeWidth="2"/><path d="M9 21V9" stroke={DL.navy} strokeWidth="2"/></svg>, label: 'Reserva', value: reservas },
@@ -190,7 +233,7 @@ function VistaGestion({ pedidos, onNuevo, onEdit,
 
       <Box sx={{ background: '#fff', borderRadius: '12px', border: `1px solid ${DL.border}`, boxShadow: DL.e2, overflow: 'hidden' }}>
         <Box sx={{ p: '12px 16px', borderBottom: `1px solid ${DL.border}`, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Stats */}
+          {/* Stats: total de la semana y desglose por tipo de cliente (se calcula en una función que se ejecuta al instante) */}
           {(() => {
             const natural  = pedidosSemana.filter(p => p.tipoCliente === 'Natural').length;
             const juridico = pedidosSemana.filter(p => p.tipoCliente === 'Jurídico').length;
@@ -238,14 +281,23 @@ function VistaGestion({ pedidos, onNuevo, onEdit,
 }
 
 // ─── Calendario mensual ───────────────────────────────────────────────────────
+// Etiquetas de columnas (la semana del calendario empieza en domingo) y nombres de meses
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// OBJETIVO: dibujar el calendario de un mes donde cada día muestra cuántos pedidos
+// confirmados se entregan, separados por tipo de cliente (N/J) y de pedido (R/P).
+// Recibe: pedidos (ya filtrados), mesRef (fecha dentro del mes a mostrar),
+// semanaActiva (índice de semana a resaltar, o null para todas), onDiaClick(iso)
+// (se ejecuta al pulsar un día del mes) y diaSeleccionado (iso resaltado).
 function CalendarioMensual({ pedidos, mesRef, semanaActiva, onDiaClick, diaSeleccionado }) {
   const year  = mesRef.getFullYear();
   const month = mesRef.getMonth();
 
   // Build weeks for the month
+  // Arma la cuadrícula: lista de semanas (cada una con 7 fechas, domingo a sábado).
+  // Empieza en el domingo anterior al día 1 y termina al completar la última
+  // semana, por eso se incluyen días de los meses vecinos (se ven atenuados).
   const weeks = useMemo(() => {
     const primerDia = new Date(year, month, 1);
     const ultimoDia = new Date(year, month + 1, 0);
@@ -265,6 +317,9 @@ function CalendarioMensual({ pedidos, mesRef, semanaActiva, onDiaClick, diaSelec
   }, [year, month]);
 
   // Pedidos por día
+  // Agrupa por fecha de entrega ('AAAA-MM-DD') y cuenta totales por tipo de cliente
+  // y de pedido. Se excluyen las cotizaciones (estadoPago 'Pendiente'): sin pago no
+  // hay producción, así que no deben ocupar un día del calendario.
   const pedidosPorDia = useMemo(() => {
     const map = {};
     pedidos.filter(p => p.estadoPago !== 'Pendiente').forEach(p => {
@@ -297,6 +352,7 @@ function CalendarioMensual({ pedidos, mesRef, semanaActiva, onDiaClick, diaSelec
 
       {/* Semanas */}
       {weeks.map((week, wi) => {
+        // Si se eligió una semana, las demás se atenúan para enfocar la vista
         const isActiveWeek = semanaActiva === null || semanaActiva === wi;
         return (
           <Box key={wi} sx={{
@@ -312,6 +368,7 @@ function CalendarioMensual({ pedidos, mesRef, semanaActiva, onDiaClick, diaSelec
               const isSel = iso === diaSeleccionado;
               const info = pedidosPorDia[iso];
               return (
+                // Solo los días del mes actual son clicables (los de relleno no)
                 <Box key={di} onClick={() => inMes && onDiaClick(iso)} sx={{
                   minHeight: 84, p: '8px 10px',
                   borderRight: di < 6 ? `1px solid ${DL.border}` : 'none',
@@ -393,6 +450,9 @@ function CalendarioMensual({ pedidos, mesRef, semanaActiva, onDiaClick, diaSelec
 
 // ─── (DetalleDia moved to /pages/PedidosDia.jsx) ─────────────────────────────
 
+// Versión antigua del detalle de un día (panel debajo del calendario). Se reemplazó
+// por la página PedidosDia.jsx y ya no se usa en esta pantalla; se conserva como
+// referencia. Recibe iso (fecha), pedidos, onClose y onEdit.
 function DetalleDia({ iso, pedidos, onClose, onEdit }) {
   const [search, setSearch]   = useState('');
   const [vendedor, setVend]   = useState('');
@@ -491,17 +551,24 @@ function DetalleDia({ iso, pedidos, onClose, onEdit }) {
 }
 
 // ─── Vista Calendario ─────────────────────────────────────────────────────────
+// Nombres de meses para los desplegables
 const MESES_DROPDOWN = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// OBJETIVO: ofrecer dos formas de ver los pedidos confirmados: el calendario del
+// mes (pulsar un día lleva a PedidosDia) o una tabla general ("control general").
+// Recibe los pedidos, el mes/año/semana elegidos en el encabezado y los filtros de
+// vendedor, cliente, tipo de pedido y búsqueda. Devuelve la tarjeta con pestañas.
 function VistaCalendario({ pedidos, onNuevo, onEdit, mesIdx, anio,
   semanaActiva, vendedor, tipo, tipoPedido, search, onSearch }) {
   const navigate = useNavigate();
-  const [vistaTab,    setVistaTab]    = useState('calendario');
-  const [infoAnchor,  setInfoAnchor]  = useState(null);
+  const [vistaTab,    setVistaTab]    = useState('calendario');   // 'calendario' | 'general'
+  const [infoAnchor,  setInfoAnchor]  = useState(null);          // ancla de la leyenda (null = oculta)
   const [colsVisibles, setColsVisibles] = useState(DEFAULT_COLS_VISIBLES);
 
+  // Fecha de referencia (día 1) para que el calendario sepa qué mes dibujar
   const mesRef = useMemo(() => new Date(anio, mesIdx, 1), [anio, mesIdx]);
 
+  // Los filtros del encabezado se aplican antes de contar pedidos por día
   const pedidosFiltrados = pedidos
     .filter(p => !tipo       || p.tipoCliente === tipo)
     .filter(p => !tipoPedido || p.tipoPedido  === tipoPedido)
@@ -531,7 +598,7 @@ function VistaCalendario({ pedidos, onNuevo, onEdit, mesIdx, anio,
 
           {/* i | Descargar | Buscar | Nuevo Pedido */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', py: '8px' }}>
-            {/* Leyenda info */}
+            {/* Leyenda info: al pasar el mouse explica qué significan N, J, R y P en el calendario */}
             <Box onMouseEnter={e => setInfoAnchor(e.currentTarget)} onMouseLeave={() => setInfoAnchor(null)}
               sx={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
               <Box sx={{
@@ -592,7 +659,8 @@ function VistaCalendario({ pedidos, onNuevo, onEdit, mesIdx, anio,
         </Box>
       </Box>
 
-      {/* Contenido */}
+      {/* Contenido: calendario o tabla general según la pestaña. La tabla general solo
+          muestra pedidos confirmados (sin las cotizaciones 'Pendiente'). */}
       {vistaTab === 'calendario' ? (
         <CalendarioMensual
           pedidos={pedidosFiltrados}
@@ -612,6 +680,7 @@ function VistaCalendario({ pedidos, onNuevo, onEdit, mesIdx, anio,
   );
 }
 
+// Título del encabezado según la vista activa (valor de "?vista=" en la URL)
 const VISTA_TITLES = {
   cotizados:  'Registro de Pedidos',
   gestion:    'Gestión de Pedidos',
@@ -620,11 +689,13 @@ const VISTA_TITLES = {
 
 const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// Opciones de mes (1-12) y de año (±2 del actual) para el filtro de "Registro de Pedidos"
 const MES_OPTIONS = MESES_NOMBRES.map((label, i) => ({ value: String(i + 1), label }));
 
 const ANIO_BASE = new Date().getFullYear();
 const ANIO_OPTIONS = [-2,-1,0,1,2].map(d => ({ value: String(ANIO_BASE + d), label: String(ANIO_BASE + d) }));
 
+// Estilo común de los selectores de mes y año
 const selectSx = {
   fontFamily: F, fontSize: 12, fontWeight: 500, color: DL.navy,
   background: '#fff', border: `1.5px solid ${DL.blue}`,
@@ -637,6 +708,7 @@ const selectSx = {
 };
 
 // Selector de mes + año
+// Recibe el mes y año actuales (texto) y sus funciones onMes / onAnio; devuelve los dos desplegables.
 function MesFiltro({ mes, onMes, anio, onAnio }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -657,20 +729,29 @@ function MesFiltro({ mes, onMes, anio, onAnio }) {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+// OBJETIVO: componente de la página. Carga los pedidos una vez, guarda los filtros
+// de cada vista y decide cuál vista pintar según "?vista=" de la URL. No recibe props.
+// Los filtros viven aquí (no dentro de cada vista) porque los selectores están en el
+// PageHeader, que es hermano de las vistas. Editar o crear un pedido navega a /pedidos/nuevo.
 export default function Pedidos() {
   const navigate = useNavigate();
   const location = useLocation();
+  // Pedidos de ejemplo + los creados por el usuario (localStorage 'pedidos_nuevos'),
+  // con los cambios aprobados aplicados. Se carga una sola vez al abrir la pantalla.
   const [pedidos] = useState(() => {
     const guardados = JSON.parse(localStorage.getItem('pedidos_nuevos') || '[]');
     return aplicarOverrides([...PEDIDOS_INICIALES, ...guardados]);
   });
 
+  // Vista activa: 'cotizados' (por defecto), 'gestion' o 'calendario'
   const vista = new URLSearchParams(location.search).get('vista') || 'cotizados';
 
   const now = new Date();
   const defaultMes  = String(now.getMonth() + 1);
   const defaultAnio = String(now.getFullYear());
 
+  // Mes y año por defecto = hoy. Cada vista tiene sus propios filtros para que al
+  // cambiar de vista no se mezclen las selecciones.
   const [mesRegistro,  setMesRegistro]  = useState(defaultMes);
   const [anioRegistro, setAnioRegistro] = useState(defaultAnio);
   const [mesGestion,   setMesGestion]   = useState(defaultMes);
@@ -699,9 +780,13 @@ export default function Pedidos() {
   const [tipoOrden,  setTipoOrden]  = useState('');
   const [estadoPago, setEstadoPago] = useState('');
 
+  // Opciones de los selectores. En cotizados el estado de pago solo puede ser 'Pendiente'
+  // (por definición de cotización), por eso se filtra antes de armar la lista.
   const vendedores  = [...new Set(pedidos.map(p => p.vendedor))];
   const estadosPago = [...new Set(pedidos.filter(p => p.estadoPago === 'Pendiente').map(p => p.estadoPago))];
 
+  // Cuántas semanas tiene el mes del calendario (4, 5 o 6), con la misma lógica de la
+  // cuadrícula domingo-sábado de CalendarioMensual; alimenta el selector "Semana".
   const calNumSemanas = useMemo(() => {
     const primerDia = new Date(calAnio, calMesIdx, 1);
     const ultimoDia = new Date(calAnio, calMesIdx + 1, 0);
@@ -721,6 +806,7 @@ export default function Pedidos() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', background: DL.bg, overflow: 'hidden' }}>
+      {/* Encabezado: los selectores cambian según la vista activa */}
       <PageHeader title={VISTA_TITLES[vista] || 'Pedidos'} live={false} showShare={false}>
         {vista === 'cotizados' && (
           <>
@@ -793,6 +879,7 @@ export default function Pedidos() {
         )}
       </PageHeader>
 
+      {/* Cuerpo: solo se monta la vista activa; onEdit abre el formulario con "?id=" del pedido */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {vista === 'cotizados'  && <VistaCotizados  pedidos={pedidos} onNuevo={() => navigate('/pedidos/nuevo')} onEdit={p => navigate(`/pedidos/nuevo?id=${encodeURIComponent(p.id)}`)} mesSeleccionado={mesRegistro} anioSeleccionado={anioRegistro}
           search={search} onSearch={setSearch}

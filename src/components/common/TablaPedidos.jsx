@@ -1,3 +1,13 @@
+// ─── Tabla de pedidos ───────────────────────────────────────────────────────────
+// Qué hace: tabla reutilizable que lista pedidos con columnas configurables,
+// orden por columna, paginación, selección múltiple con descarga de PDF y un menú
+// de acciones por fila (ver pagos, editar, ver/descargar PDF, eliminar).
+// De dónde salen los datos: no los busca; recibe el arreglo "pedidos" por props.
+// Solo lee de localStorage los pagos registrados ('pagos_pedidos') para calcular
+// el estado de pago real de cada pedido y para el panel de pagos.
+// Quién lo usa: pages/Pedidos.jsx (vistas cotizados, gestión y calendario) y
+// pages/PedidosDia.jsx. También exporta ColsButton (selector de columnas), chips
+// y FmtDate que se reutilizan en otras pantallas.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Typography, IconButton, Tooltip, Menu, MenuItem } from '@mui/material';
 import { Edit as EditIcon, MoreVert as MoreVertIcon, Delete as DeleteIcon, PictureAsPdf as PdfIcon, Download as DownloadIcon, ViewColumn as ViewColumnIcon, Visibility as VisibilityIcon, Send as SendIcon, WhatsApp as WhatsAppIcon } from '@mui/icons-material';
@@ -16,6 +26,8 @@ function Pill({ children, color, bg }) {
   );
 }
 
+// OBJETIVO: mostrar el estado de pago como una etiqueta de color (rojo = pendiente,
+// naranja = anticipo, verde = pagado). Recibe el texto del estado; devuelve el chip.
 export function EstadoChip({ estado }) {
   const map = {
     'Pendiente':      { color:'#dc2626', bg:'#fee2e2' },
@@ -27,12 +39,16 @@ export function EstadoChip({ estado }) {
   return <Pill color={s.color} bg={s.bg}>{estado}</Pill>;
 }
 
+// OBJETIVO: etiqueta del tipo de cliente. Recibe 'Natural' o 'Jurídico'; devuelve el chip
+// (verde azulado para Jurídico).
 export function TipoChip({ tipo }) {
   const isJ = tipo === 'Jurídico';
   return <Pill color={isJ?'#0d9488':'#515151'} bg={isJ?'rgba(13,148,136,.12)':'rgba(3,105,161,.12)'}>{tipo}</Pill>;
 }
 
 // ─── Fecha ────────────────────────────────────────────────────────────────────
+// OBJETIVO: mostrar una fecha ISO en dos líneas: día abreviado con fecha y hora en
+// formato 12 horas. Recibe el ISO (iso); devuelve el bloque de texto.
 export function FmtDate({ iso }) {
   const d = new Date(iso);
   const dias  = ['dom','lun','mar','mié','jue','vie','sáb'];
@@ -52,6 +68,8 @@ export function FmtDate({ iso }) {
 
 
 // ─── Código pill ──────────────────────────────────────────────────────────────
+// Etiqueta pequeña con el código de un producto o accesorio (ej. 'CATÁLOGO'). Recibe
+// el código (cod) y los colores de fondo y borde.
 function CodPill({ cod, color, bg, bd }) {
   return (
     <Box sx={{ display:'inline-flex',px:'7px',py:'1px',borderRadius:'5px',background:bg,border:`1px solid ${bd}` }}>
@@ -61,11 +79,15 @@ function CodPill({ cod, color, bg, bd }) {
 }
 
 // ─── Líneas detalle ───────────────────────────────────────────────────────────
+// OBJETIVO: resumir en la celda "Detalle" qué contiene el pedido (pasteles personalizados,
+// productos de catálogo y accesorios). Recibe el arreglo de líneas del pedido y
+// devuelve una lista de etiquetas con su código.
 function LineasDetalle({ lineas }) {
   return (
     <Box sx={{ display:'flex',flexDirection:'column',gap:'5px' }}>
       {lineas.map((l, i) => {
         // Accesorios con accDe → se renderizan bajo su pastel, no aquí
+        // (accDe = código del pastel al que pertenecen; así se ve a cuál acompañan)
         if (l.tipo === 'Accesorios' && l.accDe) return null;
 
         if (l.tipo === 'Pastel Personalizado') {
@@ -119,8 +141,13 @@ function LineasDetalle({ lineas }) {
 }
 
 // ─── Pago Drawer ──────────────────────────────────────────────────────────────
+// Métodos de pago que se pueden elegir al registrar un pago
 const METODOS_PAGO = ['Efectivo','Transferencia','Tarjeta de Crédito / Débito','Cheque'];
 
+// OBJETIVO: panel lateral para consultar y registrar los pagos de un pedido.
+// Recibe el pedido y onClose. Muestra total, pendiente e historial; al guardar un pago
+// lo agrega a localStorage ('pagos_pedidos', un objeto con la lista de pagos por id
+// de pedido). Cuando el pendiente llega a 0 el pedido se considera Pagado.
 function PagoDrawer({ pedido, onClose }) {
   const storageKey = 'pagos_pedidos';
   const [pagos, setPagos] = useState(() => {
@@ -132,11 +159,15 @@ function PagoDrawer({ pedido, onClose }) {
   const [form, setForm] = useState({ fecha: today, metodo: '', monto: '' });
   const [error, setError] = useState('');
 
+  // Cálculo de saldos: total del pedido, suma de pagos y lo que falta por pagar
   const total    = Number(pedido.total) || 0;
   const pagado   = pagos.reduce((s, pg) => s + Number(pg.monto), 0);
   const pendiente = Math.max(0, total - pagado);
   const isPagado = pedido.estadoPago === 'Pagado' || pendiente <= 0;
 
+  // Validaciones antes de guardar un pago: método elegido, monto mayor que 0 y que no
+  // supere lo pendiente (así nunca se cobra de más). Si todo está bien se guarda en
+  // el estado y en localStorage.
   const guardar = () => {
     if (!form.metodo) { setError('Selecciona un método de pago'); return; }
     const m = Number(form.monto);
@@ -320,6 +351,10 @@ function PagoDrawer({ pedido, onClose }) {
 }
 
 // ─── Row Menu ─────────────────────────────────────────────────────────────────
+// OBJETIVO: menú de tres puntos de cada fila con las acciones del pedido.
+// Recibe el pedido (p) y las funciones onEdit, onDelete, onPdfDescargado (para marcar
+// la hora de descarga) y onVerPagos. La eliminación pide confirmación antes de ejecutar
+// onDelete, porque es permanente.
 function RowMenu({ p, onEdit, onDelete, onPdfDescargado, onVerPagos }) {
   const [anchor, setAnchor] = useState(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
@@ -330,6 +365,7 @@ function RowMenu({ p, onEdit, onDelete, onPdfDescargado, onVerPagos }) {
     '&:hover': { background: `${color}12` },
   });
 
+  // Texto del lugar de entrega: si es a domicilio muestra la dirección; si no, la sucursal
   const lugarLabel = p.lugarEntrega === 'Domicilio' && p.direccionEntrega
     ? (typeof p.direccionEntrega === 'object'
         ? p.direccionEntrega.direccion || ''
@@ -446,6 +482,8 @@ function RowMenu({ p, onEdit, onDelete, onPdfDescargado, onVerPagos }) {
 }
 
 // ─── Tabla ────────────────────────────────────────────────────────────────────
+// Definición de las columnas (clave, título y ancho). 'check' y 'accion' son fijas;
+// las demás se pueden ocultar con ColsButton.
 const COLS = [
   { key:'check',  label:'',               w:36   },
   { key:'id',     label:'N° Pedido',      w:100  },
@@ -461,11 +499,15 @@ const COLS = [
   { key:'accion',   label:'',               w:44   },
 ];
 
+// Borde suave que separa las filas
 const ROW_BORDER = '1px solid rgba(26,26,26,.065)';
 
+// Columnas que el usuario puede mostrar u ocultar, y conjunto inicial con todas visibles
 export const COLS_OPCIONALES = COLS.filter(c => c.key !== 'check' && c.key !== 'accion');
 export const DEFAULT_COLS_VISIBLES = new Set(COLS_OPCIONALES.map(c => c.key));
 
+// Cómo obtener, de cada pedido, el valor por el que se ordena cada columna (todos texto,
+// para poder comparar con localeCompare). Las columnas sin entrada aquí no se ordenan.
 const SORT_FN = {
   id:     p => p.id || '',
   vend:   p => p.vendedor || '',
@@ -480,6 +522,9 @@ const SORT_FN = {
 };
 
 // ─── ColsButton (exported) ────────────────────────────────────────────────────
+// OBJETIVO: botón con menú para elegir qué columnas se ven. Recibe el conjunto de
+// columnas visibles y onChange para actualizarlo (lo guarda la página padre). Siempre
+// deja al menos una columna visible y se cierra al hacer clic fuera.
 export function ColsButton({ colsVisibles, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -540,15 +585,24 @@ export function ColsButton({ colsVisibles, onChange }) {
   );
 }
 
+// OBJETIVO: dibujar la tabla completa de pedidos.
+// Recibe: pedidos (arreglo ya filtrado por la página), onEdit y onDelete (acciones del
+// menú de fila), showPagination (true = pagina de a 5/10/... filas) y colsVisibles
+// (columnas a mostrar). Devuelve la tabla con su barra de selección y paginación;
+// los clics en editar/eliminar se avisan al padre por onEdit/onDelete.
 export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination = true, colsVisibles = DEFAULT_COLS_VISIBLES }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  // pdfTimestamps: hora de la última descarga de PDF por pedido; seleccionados: ids marcados
+  // con el checkbox; sortKey/sortDir: columna y sentido del orden; pedidoPagos: pedido cuyo
+  // panel de pagos está abierto (null = cerrado).
   const [pdfTimestamps, setPdfTimestamps] = useState({});
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [pedidoPagos, setPedidoPagos] = useState(null);
   const [tick, setTick] = useState(0);
+  // Cada 30 s se fuerza un nuevo render para que "hace X min" y los pagos se mantengan al día
   useEffect(() => {
     const t = setInterval(() => setTick(n => n + 1), 30000);
     return () => clearInterval(t);
@@ -559,6 +613,9 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
     return JSON.parse(localStorage.getItem('pagos_pedidos') || '{}');
   }, [tick, pedidoPagos]);
 
+  // Estado de pago que realmente se muestra: se calcula con los pagos registrados y no
+  // solo con el campo estadoPago. Pagado si cubre el total, Anticipo si hay algún pago
+  // y, si no hay pagos, el estado original del pedido (ej. 'Pendiente' = cotización).
   const estadoEfectivoPedido = (p) => {
     const registrados = pagosPorId[p.id] || [];
     const pagado = registrados.reduce((s, r) => s + (r.monto || 0), 0);
@@ -567,13 +624,16 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
     return p.estadoPago;
   };
 
+  // Columnas a dibujar: las fijas más las que el usuario dejó marcadas
   const visibleCols = COLS.filter(c => c.key === 'check' || c.key === 'accion' || colsVisibles.has(c.key));
 
+  // Primer clic en una columna ordena ascendente; un segundo clic invierte el orden
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
   };
 
+  // Copia ordenada de los pedidos (no se modifica el arreglo original que llega por props)
   const sortedPedidos = useMemo(() => {
     if (!sortKey || !SORT_FN[sortKey]) return pedidos;
     const fn = SORT_FN[sortKey];
@@ -583,6 +643,7 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
     });
   }, [pedidos, sortKey, sortDir]);
 
+  // Guarda la hora de la última descarga de un pedido para mostrar "hace X min" en la columna Descarga
   const markPdf = id => setPdfTimestamps(prev => ({ ...prev, [id]: Date.now() }));
   const tiempoRelativo = ts => {
     const seg = Math.floor((Date.now() - ts) / 1000);
@@ -590,10 +651,14 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
     if (seg < 3600) return `hace ${Math.floor(seg/60)}min`;
     return `hace ${Math.floor(seg/3600)}h`;
   };
+  // Filas de la página actual; sin paginación se muestran todas
   const rows = showPagination
     ? sortedPedidos.slice((page-1)*pageSize, page*pageSize)
     : sortedPedidos;
 
+  // ── Selección múltiple ──
+  // Los ids marcados se guardan en un Set para sumar o quitar un pedido sin duplicados.
+  // El checkbox del encabezado marca o desmarca solo las filas de la página visible.
   const toggleRow = (id) => setSeleccionados(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -605,6 +670,7 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
     else setSeleccionados(prev => { const n = new Set(prev); rows.forEach(p => n.add(p.id)); return n; });
   };
 
+  // Estilo del checkbox personalizado (relleno cuando está marcado)
   const chkStyle = (checked) => ({
     width: 14, height: 14, borderRadius: '3px', flexShrink: 0, cursor: 'pointer',
     border: `1.5px solid ${checked ? DL.blue : DL.border2}`,
@@ -618,6 +684,8 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
   return (
     <>
     <Box>
+      {/* Barra de selección múltiple: aparece solo si hay pedidos marcados y permite
+         descargar todos sus PDF de una vez o cancelar la selección */}
       {numSeleccionados > 0 && (
         <Box sx={{
           display:'flex', alignItems:'center', justifyContent:'space-between',
@@ -636,6 +704,8 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
               Cancelar
             </Box>
             <Box component="button" onClick={() => {
+              // Descarga un PDF por cada pedido marcado. Se espacian 350 ms entre uno y otro
+              // (i * 350) para que el navegador no bloquee las descargas lanzadas todas juntas.
               const elegidos = pedidos.filter(x => seleccionados.has(x.id));
               elegidos.forEach((x, i) => setTimeout(() => { descargarPedidoPdf(x); markPdf(x.id); }, i * 350));
             }} title={`Descargar PDF${numSeleccionados !== 1 ? 's' : ''}`} aria-label="Descargar PDF" sx={{
@@ -709,6 +779,7 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
                 <Box sx={{ display:'flex',alignItems:'center',gap:'6px' }}>
                   <Typography sx={{ fontSize:11,fontWeight: 500,color:DL.tH,fontFamily:F,whiteSpace:'nowrap',letterSpacing:'0.02em' }}>{p.id}</Typography>
                 </Box>
+                {/* Etiqueta del tipo de pedido (Reserva / Producción / Mixto) bajo el número */}
                 {p.tipoPedido && (() => {
                   const tpMap = {
                     'Reserva':    { bg:'#f0fdf4', color:'#15803d', bd:'#bbf7d0' },
@@ -791,6 +862,7 @@ export default function TablaPedidos({ pedidos, onEdit, onDelete, showPagination
       )}
     </Box>
     </Box>
+    {/* Panel de pagos: solo se monta cuando se pidió "Ver pagos" de un pedido */}
     {pedidoPagos && <PagoDrawer pedido={pedidoPagos} onClose={() => setPedidoPagos(null)} />}
     </>
   );

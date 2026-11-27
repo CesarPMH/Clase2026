@@ -1,4 +1,14 @@
-// ─── Clientes ────────────────────────────────────────────────────────────────
+// ─── pedidosMock.js: datos de demostración del módulo de pedidos ──────────────
+// Objetivo: como el proyecto no tiene backend, este archivo hace de "base de datos" en memoria.
+// Contiene los catálogos (productos, accesorios, toppers), las opciones de cada configurador
+// (pastel, cupcakes, galletas), las opciones de entrega y pago, y los pedidos de ejemplo.
+// Lo consumen las pantallas de pedidos, el calendario, las ventas y el formulario de "Pedido Nuevo".
+// Los arreglos CLIENTES, CATALOGO, ACCESORIOS y TOPPERS se modifican en su lugar desde
+// data/configuracion.js (con splice), por eso las pantallas siempre ven los datos activos.
+//
+// ─── Clientes ───
+// CLIENTES: clientes de ejemplo. "Natural" usa dui y "Jurídico" usa nit. Cada cliente puede
+// tener varias direcciones de entrega (departamento, municipio y una referencia).
 export const CLIENTES = [
   { id: 1, dui: '021135560', nombre: 'Pablo Herrera', telefono: '+503 7777 7777', email: 'correo@correo.com', tipo: 'Natural', direcciones: [
     { id: 1, direccion: 'Col. Escalón, Av. 12 #8', departamento: 'San Salvador', municipio: 'San Salvador', comentario: 'Portón azul, timbre derecho' },
@@ -20,7 +30,12 @@ export const CLIENTES = [
   ]},
 ];
 
-// ─── Pedidos ──────────────────────────────────────────────────────────────────
+// ─── Pedidos ───
+// PEDIDOS_INICIALES: pedidos escritos a mano (junio de 2026) para tener datos fijos y conocidos.
+// Cada pedido tiene "lineas" (órdenes): Catálogo (con qty), Pastel Personalizado (con código) o
+// Accesorios (con códigos; accDe indica el pastel al que acompañan). Al final del archivo se le
+// agregan los pedidos generados automáticamente (ver generarPedidosDemo).
+// estadoPago puede ser: Pendiente (cotización), Anticipo, Contra Entrega o Pagado.
 export const PEDIDOS_INICIALES = [
   {
     id: 'PED-2606-001', tipoPedido: 'Reserva',
@@ -680,7 +695,9 @@ export const PEDIDOS_INICIALES = [
   },
 ];
 
-// ─── Catálogo de productos ────────────────────────────────────────────────────
+// ─── Catálogo de productos ───
+// CATALOGO: productos listos para vender ("vienen de SAP"). Cada uno tiene id, nombre, precio,
+// categoría y sku. Cambia en ejecución si en Configuración se desactiva un producto.
 export const CATALOGO = [
   { id: 1,  nombre: 'Galleta Muñeca Rosa',               precio: 10.00, categoria: 'Galletería',   sku: 'GAL-001' },
   { id: 2,  nombre: 'Galleta Esponja Marina',           precio: 14.00, categoria: 'Galletería',   sku: 'GAL-002' },
@@ -733,9 +750,11 @@ export const CATALOGO = [
   { id: 82, nombre: 'Moño Ornamental',               precio: 1.50,  categoria: 'Artículos',  sku: 'PRD-082' },
 ];
 
+// CATALOGO_CATS: categorías del filtro del catálogo; "Todas" no filtra.
 export const CATALOGO_CATS = ['Todas', 'Refrescos', 'Galletería', 'Varios', 'Panificados', 'Repostería', 'Dulces', 'Artículos'];
 
-// Stock disponible por ítem en sucursal (para pedidos de reserva)
+// STOCK_POR_ITEM: unidades disponibles por id de producto en la sucursal. Se usa en los pedidos de
+// Reserva, para no permitir reservar más de lo que hay.
 export const STOCK_POR_ITEM = {
   1:25, 2:18, 3:40, 4:30, 5:22, 6:15, 7:45, 8:28, 9:20, 10:35,
   11:12, 12:8, 13:50, 14:38, 15:42, 16:25, 17:30, 18:55, 19:48, 20:60,
@@ -748,7 +767,9 @@ export const STOCK_POR_ITEM = {
   80:20, 81:25, 82:40,
 };
 
-// ─── Accesorios ───────────────────────────────────────────────────────────────
+// ─── Accesorios ───
+// ACCESORIOS: velas, adornos y otros complementos que se agregan a un pastel o se piden solos
+// (mismo formato que el catálogo).
 export const ACCESORIOS = [
   { id: 100, nombre: 'Vela #1',                      precio: 3.00,  categoria: 'Todas',               sku: 'ACC-100' },
   { id: 101, nombre: 'Vela #2',                      precio: 7.00,  categoria: 'Todas',               sku: 'ACC-101' },
@@ -781,9 +802,12 @@ export const ACCESORIOS = [
   { id: 128, nombre: 'Alambre Revestido (C-200u)',     precio: 15.00, categoria: 'Todas',               sku: 'ACC-128' },
 ];
 
+// ACCESORIOS_CATS: categorías del filtro de accesorios.
 export const ACCESORIOS_CATS = ['Todas', 'Mayores', 'Niños', 'Paquetes', 'Fechas Especiales', 'Adornos'];
 
-// ─── Toppers ─────────────────────────────────────────────────────────────────
+// ─── Toppers ───
+// TOPPERS_SUBCATS: tipos de adorno de topper. "necesitaImagen" indica que el cliente debe subir una
+// imagen y "necesitaNombre" que debe escribir un nombre para el mensaje.
 export const TOPPERS_SUBCATS = [
   { id: 'impreso',            label: 'Adorno Impreso' },
   { id: 'impreso-edicion',    label: 'Adorno Impreso Editado',       necesitaImagen: true },
@@ -792,6 +816,7 @@ export const TOPPERS_SUBCATS = [
   { id: 'frases',             label: 'Mensajes Prediseñados + Nombre', necesitaNombre: true },
 ];
 
+// TOPPERS: toppers para pastel; "subcat" enlaza cada uno con su tipo en TOPPERS_SUBCATS.
 export const TOPPERS = [
   // Adorno Impreso
   { id: 300, nombre: 'Adorno Circular 10cm',      precio: 4.00,  subcat: 'impreso',            sku: 'TOP-300' },
@@ -817,9 +842,12 @@ export const TOPPERS = [
   { id: 343, nombre: 'Mensaje Bienvenida Bebé',        precio: 4.50,  subcat: 'frases',             sku: 'TOP-343' },
 ];
 
-// ─── Pastel personalizado ─────────────────────────────────────────────────────
-// porciones: base interna para calcular precio. rango: texto mostrado al cliente.
+// ─── Configurador de pastel personalizado ───
+// Las listas siguientes alimentan cada paso del asistente de pastel (ver PASTEL_STEPS).
+// PASTEL_TAMANOS: tamaños de pastel. "porciones" es la base interna para calcular el precio y
+// "rango" es el texto que ve el cliente.
 // precioBase: precio cuando es doble relleno ($2.50 × porciones)
+// "montado" marca el pastel escalonado, que tiene reglas especiales (ver PASTEL_RELLENOS).
 export const PASTEL_TAMANOS = [
   { id: 'p-mediano',     label: 'Regular',      rango: '14–20 porciones', porciones: 15, precioBase: 37.50, montado: false },
   { id: 'p-grande',      label: 'Familiar',        rango: '24–30 porciones', porciones: 20, precioBase: 50.00, montado: false },
@@ -827,19 +855,23 @@ export const PASTEL_TAMANOS = [
   { id: 'p-montado',     label: 'Escalonado',       rango: '44–50 porciones', porciones: 45, precioBase: 112.50, montado: true },
 ];
 
+// PRECIO_POR_PORCION: recargo por porción según el tipo de relleno. El doble no suma (ya está en
+// precioBase) y el triple suma $0.50 por porción.
 export const PRECIO_POR_PORCION = { doble: 0, triple: 0.50 };
 
-// Tipo de relleno — paso previo al sabor de relleno
+// PASTEL_TIPOS_RELLENO: relleno doble o triple capa, paso previo al sabor del relleno.
 // precioBase ya incluye el doble relleno; doble no suma nada, triple suma $0.50/porción
 export const PASTEL_TIPOS_RELLENO = [
   { id: 'doble', label: 'Doble Capa', desc: '2 capas · estándar', precioPorPorcion: 0 },
   { id: 'triple', label: 'Triple Capa', desc: '3 capas · más altura', precioPorPorcion: 0.50 },
 ];
 
+// CUPCAKE_TAMANOS: presentaciones de cupcakes con su precio.
 export const CUPCAKE_TAMANOS = [
   { id: 'c-12', label: 'Docena', precio: 22.00 },
 ];
 
+// Opciones de los pasos de sabor, remojo, relleno, textura, color, borde y dedicatoria del pastel.
 export const PASTEL_SABORES = [
   'Cacao', 'Vainilla Clásica', 'Frutilla', 'Cítrico', 'Maracuyá',
   'Terciopelo Rojo', 'Zanahoria Especiada', 'Triple Leche', 'Coco Rallado', 'Moka',
@@ -850,6 +882,8 @@ export const PASTEL_REMOJOS = [
   'Almíbar de Cacao', 'Leche Azucarada', 'Moka',
 ];
 
+// PASTEL_RELLENOS: sabores de relleno. Las banderas restringen cuándo se pueden elegir:
+// soloDoble = no disponible en triple capa; bloqMontado = no disponible en pastel escalonado.
 export const PASTEL_RELLENOS = [
   { id: 'pudin',     label: 'Flan Toffee' },
   { id: 'fresas',    label: 'Frutillas con Nata',  soloDoble: true },  // no disponible en Triple
@@ -865,6 +899,7 @@ export const PASTEL_TEXTURAS_BASE = [
   'Pulida', 'Rústica', 'Cobertura Natural', 'Cobertura de Color', 'Crema Batida', 'Según el diseño',
 ];
 
+// PASTEL_COLORES_POR_TEXTURA: colores disponibles según la textura elegida (nombre y código hexadecimal para dibujar la muestra).
 export const PASTEL_COLORES_POR_TEXTURA = {
   'Pulida': [
     { nombre: 'Nieve',       hex: '#FFFFFF' },
@@ -924,12 +959,14 @@ export const PASTEL_COLORES_POR_TEXTURA = {
   ],
 };
 
+// PASTEL_TEXTURAS: lista combinada textura + color, para mostrarla en el resumen del pedido.
 export const PASTEL_TEXTURAS = [
   'Pulida - Olivo', 'Pulida - Blanco', 'Pulida - Rosa',
   'Rústica - Olivo', 'Rústica - Blanco',
   'Cobertura Natural', 'Cobertura de Color', 'Crema Batida',
 ];
 
+// Bordes ("ruedos"): en qué parte del pastel va (TIPOS), estilos de borde disponibles y lista general.
 export const PASTEL_RUEDOS_TIPOS = [
   'Borde arriba y abajo', 'Solo superior', 'Solo inferior', 'Sin borde',
 ];
@@ -942,6 +979,8 @@ export const PASTEL_RUEDOS = [
   'Borde arriba y abajo', 'Solo superior', 'Solo inferior', 'Sin borde',
 ];
 
+// PASTEL_DEDICATORIAS: mensajes prediseñados para la dedicatoria.
+// PASTEL_DEDICATORIA_TIPOS: cómo se presenta (placa impresa o placa de azúcar).
 export const PASTEL_DEDICATORIAS = [
   'Feliz Día', 'Enhorabuena', 'Con Afecto',
   'En tu gran día', 'A tu medida', 'Sin mensaje',
@@ -952,6 +991,8 @@ export const PASTEL_DEDICATORIA_TIPOS = [
   { id: 'dulce',        label: 'Placa de Azúcar',  desc: 'Inscrita en una plaquita de fondant' },
 ];
 
+// PASTEL_STEPS: pasos del asistente de pastel, en orden. Se muestra una pantalla por cada elemento
+// y el avance se calcula con la cantidad de pasos.
 export const PASTEL_STEPS = [
   'Imagen de referencia',
   'Dimensión de Torta',
@@ -965,6 +1006,7 @@ export const PASTEL_STEPS = [
   'Accesorios',
 ];
 
+// CUPCAKE_STEPS: pasos del asistente de cupcakes, en orden.
 export const CUPCAKE_STEPS = [
   'Cantidad',
   'Sabor de Crema',
@@ -978,6 +1020,7 @@ export const CUPCAKE_STEPS = [
 
 export const CUPCAKE_PRECIO_UNITARIO = 2.00; // precio por cupcake individual
 
+// GALLETAS_STEPS: pasos del asistente de galletas decoradas; GALLETAS_FORMAS son las formas disponibles.
 export const GALLETAS_STEPS = [
   'Cantidad',
   'Forma',
@@ -986,6 +1029,7 @@ export const GALLETAS_STEPS = [
 
 export const GALLETAS_FORMAS = ['Redonda', 'Cuadriculada'];
 
+// Opciones de los pasos del asistente de cupcakes (cremas, tortas, rellenos, colores y texturas).
 export const CUPCAKE_SABORES_CREMA = ['Praliné'];
 
 export const CUPCAKE_SABORES_TORTA = ['Vainilla Clásica', 'Cacao'];
@@ -1002,22 +1046,34 @@ export const CUPCAKE_COLORES = [
 
 export const CUPCAKE_TEXTURAS = ['Rosetón', 'Pétalo', 'Césped', 'Remolino'];
 
-// ─── Opciones de entrega y pago ───────────────────────────────────────────────
+// ─── Opciones de entrega y pago ───
+// Último paso del pedido: LUGARES_ENTREGA = dónde se entrega (domicilio o sucursal),
+// TIPOS_PAGO = cuándo se paga y METODOS_PAGO = cómo se paga.
 export const LUGARES_ENTREGA = ['Domicilio', 'Sucursal Centro', 'Sucursal Norte', 'Sucursal Sur'];
 export const TIPOS_PAGO = ['Anticipo', 'Contra Entrega', 'Pagado'];
 export const METODOS_PAGO = ['Efectivo', 'Transferencia Bancaria', 'Tarjeta de Crédito / Débito'];
 
-// ─── Pedidos de demostración relativos a la fecha actual ──────────────────────
-// Se generan al cargar para que Registro, Gestión y Calendario siempre se vean
-// llenos (semana en curso, mes en curso y alrededores). Determinista: mismos datos
-// cada día de la semana/mes, sin aleatoriedad real.
+// ─── Pedidos de demostración relativos a la fecha actual ───
+// generarPedidosDemo: genera pedidos de ejemplo alrededor de la fecha de hoy para que Registro,
+// Gestión y Calendario siempre se vean llenos (si no, quedarían vacíos con el paso de los días).
+// Se ejecuta una sola vez al cargar el archivo y agrega los pedidos a PEDIDOS_INICIALES.
+// Resultado: 10 entregas por cada día del rango (45 días atrás a 15 adelante) más 12 cotizaciones.
+// Se usa un generador pseudoaleatorio con semilla (no Math.random): como la semilla es fija, para
+// la misma fecha los datos salen iguales en cada recarga, aunque parezcan aleatorios.
 (function generarPedidosDemo() {
+  // seed: semilla fija del generador pseudoaleatorio.
   let seed = 20260;
+  // rnd: generador pseudoaleatorio con semilla. Devuelve un decimal entre 0 y 1 y avanza la semilla;
+  // la misma semilla produce siempre la misma secuencia de números.
   const rnd = () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  // pick: elige un elemento de una lista usando rnd, para que la elección sea repetible.
   const pick = (a) => a[Math.floor(rnd() * a.length)];
+  // pad: agrega ceros a la izquierda (5 -> "05") para fechas y códigos.
   const pad = (n) => String(n).padStart(2, '0');
+  // iso: arma el texto de fecha y hora (aaaa-mm-ddThh:mm:00) con el mismo formato de los pedidos escritos a mano.
   const iso = (d, h, m = 0) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(h)}:${pad(m)}:00`;
 
+  // Datos base para armar los pedidos: personas y empresas (nombre, teléfono), vendedores, lugares y direcciones de entrega, y códigos de pastel y accesorios.
   const personas = [
     ['Pablo Herrera', '+503 7777 7777'], ['Ana Lucía Rivas', '+503 2222 2222'], ['Marta Lemus', '+503 6666 6666'],
     ['Silvia Rosales', '+503 7810 2233'], ['Verónica Maldonado', '+503 7455 1290'], ['Rodrigo Cordero', '+503 7001 8842'],
@@ -1043,10 +1099,17 @@ export const METODOS_PAGO = ['Efectivo', 'Transferencia Bancaria', 'Tarjeta de C
   const codPastel = ['CHO', 'VAN', 'TRE', 'RED', 'FRE', 'COC'];
   const accs = ['ACC-VEL-010', 'ACC-FLO-001', 'ACC-LAZ-002', 'ACC-TOP-005'];
 
+  // n: contador para numerar los pedidos generados (parte de 100 para no chocar con los fijos).
   let n = 100;
+  // nuevo: crea UN pedido de ejemplo con entrega en la fecha "entrega". Si "pendiente" es true crea una
+  // cotización (prefijo COT y estado Pendiente). Decide con rnd si el cliente es natural o jurídico y si
+  // el pedido es de Producción (pasteles, accesorios y catálogo) o Reserva (solo catálogo), y calcula un
+  // total aproximado.
   const nuevo = (entrega, pendiente) => {
+    // Alrededor del 30 % de los pedidos son de empresas.
     const juridico = rnd() < 0.3;
     const [nombre, telefono] = pick(juridico ? empresas : personas);
+    // Alrededor del 62 % son de Producción; el resto son Reservas de catálogo.
     const produccion = rnd() < 0.62;
     const lineas = [];
     let total = 0;
@@ -1074,10 +1137,13 @@ export const METODOS_PAGO = ['Efectivo', 'Transferencia Bancaria', 'Tarjeta de C
       total += qty * 3.2 + 6;
       if (rnd() < 0.3) { lineas.push({ tipo: 'Catálogo', label: 'Orden #2', qty: 4 + Math.floor(rnd() * 10) }); total += 18; }
     }
+    // Se le suma el IVA (13 %) al total.
     total = Math.round(total * 1.13);
+    // Estado de pago: ~42 % Pagado, ~33 % Anticipo y el resto Contra Entrega (las cotizaciones siempre Pendiente).
     const r = rnd();
     const estadoPago = pendiente ? 'Pendiente' : r < 0.42 ? 'Pagado' : r < 0.75 ? 'Anticipo' : 'Contra Entrega';
-    // registro: pocos días antes de la entrega, sin pasar de hoy
+    // Fecha de registro: unos días antes de la entrega, pero nunca después de hoy (un pedido no puede
+    // haberse registrado en el futuro). Después se reasigna para repartir el registro (ver más abajo).
     const hoy = new Date();
     const reg = new Date(entrega);
     reg.setDate(reg.getDate() - (produccion ? 5 + Math.floor(rnd() * 8) : 1 + Math.floor(rnd() * 3)));
@@ -1095,8 +1161,11 @@ export const METODOS_PAGO = ['Efectivo', 'Transferencia Bancaria', 'Tarjeta de C
     };
   };
 
+  // Fechas de referencia: hoy y el lunes de la semana actual. Luego se recorre día por día el rango
+  // de entregas creando pedidos.
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+  // out: acumula los pedidos generados antes de agregarlos a PEDIDOS_INICIALES.
   const out = [];
   // Rango: 45 días atrás hasta 15 días adelante (10 entregas por día)
   const ini = new Date(hoy); ini.setDate(ini.getDate() - 45);
@@ -1111,17 +1180,19 @@ export const METODOS_PAGO = ['Efectivo', 'Transferencia Bancaria', 'Tarjeta de C
       out.push(nuevo(e, false));
     }
   }
-  // Registro: 10 pedidos registrados por día durante los últimos 60 días (hasta hoy)
+  // Fechas de registro: se ordenan los pedidos por entrega y se reparten de forma pareja en los últimos
+  // 60 días (hasta hoy), así el Registro muestra unos 10 pedidos por día.
   out.sort((a, b) => a.entrega.localeCompare(b.entrega));
   const dias = 60;
   out.forEach((o, k) => {
     const r = new Date(hoy); r.setDate(hoy.getDate() - (dias - 1) + Math.min(dias - 1, Math.floor(k * dias / out.length)));
     o.registro = iso(r, 8 + Math.floor(rnd() * 9), Math.floor(rnd() * 60));
   });
-  // Cotizaciones (pendientes) registradas este mes, con entrega a futuro
+  // Cotizaciones: 12 pedidos en estado Pendiente (sin pago), registrados este mes y con entrega próxima.
   for (let i = 0; i < 12; i++) {
     const e = new Date(hoy); e.setDate(hoy.getDate() + (i < 3 ? i % 2 : 3 + Math.floor(rnd() * 16))); e.setHours(10 + Math.floor(rnd() * 7), pick([0, 30]), 0, 0);
     out.push(nuevo(e, true));
   }
+  // Los pedidos generados se agregan al final de los escritos a mano.
   PEDIDOS_INICIALES.push(...out);
 })();

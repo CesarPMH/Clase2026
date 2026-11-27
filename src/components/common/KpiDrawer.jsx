@@ -1,5 +1,8 @@
 // ─── KPI Intelligence Drawer ──────────────────────────────────────────────────
-// Drawer lateral que muestra contexto accionable para cualquier KPI.
+// Panel lateral (drawer) que se abre al pulsar "detalle" en una KpiCard. Explica el KPI
+// para quien lo consulta: qué es y su fórmula, por qué importa y qué acción tomar,
+// y en qué zona está comparado con un rango de referencia (benchmark).
+// El texto de cada KPI no está aquí: viene en el objeto "intel" (data/kpi_intel.js).
 // Props: open, onClose, kpiId (string), kpiLabel, kpiValue, accentColor, intel (objeto de kpi_intel.js)
 
 import { Drawer } from '@mui/material';
@@ -8,15 +11,22 @@ import { Close as CloseIcon } from '@mui/icons-material';
 import { DL } from '../../theme';
 
 // ─── Benchmark range bar ──────────────────────────────────────────────────────
+// Objetivo: dibujar una barra horizontal dividida en zonas de color (ej. crítico / aceptable / saludable)
+// con un marcador que indica dónde está el valor actual.
+// Props: bm (benchmark) con min y max del eje, zonas [{from, to, color, label}], tuPos (valor actual),
+// tuLabel (texto del marcador), industria, nota (explicación) e invertido (true si menos es mejor).
+// Devuelve: la barra, la leyenda de zonas y la nota; si no hay benchmark no dibuja nada (null).
 function BenchmarkBar({ bm }) {
   if (!bm) return null;
   const { min, max, zonas, tuPos, tuLabel, nota, invertido } = bm;
+  // Todo se convierte a porcentaje del rango (max - min) para posicionar zonas y marcador con CSS en %.
   const range = max - min;
+  // El marcador se limita entre 1 % y 99 % para que no se salga de la barra si el valor está fuera del rango.
   const markerPct = Math.min(Math.max(((tuPos - min) / range) * 100, 1), 99);
 
   return (
     <Box>
-      {/* Range bar */}
+      {/* Barra: cada zona se coloca de forma absoluta según sus límites; solo la primera y la última tienen esquinas redondeadas. */}
       <Box sx={{ position:'relative', height:14, borderRadius:7, overflow:'visible', display:'flex', mb:'18px' }}>
         {zonas.map((z, i) => {
           const w = ((z.to - z.from) / range) * 100;
@@ -55,7 +65,7 @@ function BenchmarkBar({ bm }) {
         </Box>
       </Box>
 
-      {/* Zone labels */}
+      {/* Leyenda: un punto de color por zona con su nombre. */}
       <Box sx={{ display:'flex', justifyContent:'space-between', mb:'10px' }}>
         {zonas.map((z, i) => (
           <Box key={i} sx={{ display:'flex', alignItems:'center', gap:'3px' }}>
@@ -93,6 +103,8 @@ function BenchmarkBar({ bm }) {
 }
 
 // ─── Section block ────────────────────────────────────────────────────────────
+// Objetivo: bloque con ícono de color y título que agrupa cada parte del drawer.
+// Props: icon (símbolo), color y bg (color del ícono y su fondo), title, children (contenido).
 function Section({ icon, color, bg, title, children }) {
   return (
     <Box sx={{ mb:'12px' }}>
@@ -114,9 +126,15 @@ function Section({ icon, color, bg, title, children }) {
 }
 
 // ─── Main Drawer ──────────────────────────────────────────────────────────────
+// Objetivo: mostrar el panel lateral con la explicación de un KPI.
+// Props: open (visible), onClose, kpiLabel (nombre), kpiValue (valor ya formateado),
+// accentColor (color de acento del KPI), intel ({ que, formula, porque, accion, benchmark }).
+// Devuelve: el Drawer, o null si ese KPI no tiene información (intel).
 export default function KpiDrawer({ open, onClose, kpiLabel, kpiValue, accentColor, intel }) {
   if (!intel) return null;
   const { que, formula, porque, accion, benchmark } = intel;
+  // Se busca la zona llamada "Saludable" para mostrar su rango (ej. "20% – 30%") junto al nombre de la industria.
+  // Nota: min + (from - min) equivale a from; la forma larga queda así por como se escribió originalmente.
   const safeZona = benchmark?.zonas?.find(z => z.label === 'Saludable');
   const benchRango = safeZona
     ? `${benchmark.min + (safeZona.from - benchmark.min)}${benchmark.unidad} – ${safeZona.to}${benchmark.unidad}`
@@ -129,7 +147,7 @@ export default function KpiDrawer({ open, onClose, kpiLabel, kpiValue, accentCol
       onClose={onClose}
       slotProps={{ paper: { sx: { width: 380, borderRadius: '12px 0 0 12px', boxShadow: '-4px 0 32px rgba(26,26,26,.12)', display: 'flex', flexDirection: 'column' } } }}
     >
-      {/* ── Header ── */}
+      {/* Encabezado: franja de color del KPI, botón de cerrar, nombre y valor actual en grande. */}
       <Box sx={{
         borderLeft: `4px solid ${accentColor}`,
         px: '20px', pt: '20px', pb: '16px',
@@ -165,7 +183,7 @@ export default function KpiDrawer({ open, onClose, kpiLabel, kpiValue, accentCol
         </Box>
       </Box>
 
-      {/* ── Content ── */}
+      {/* Contenido con scroll propio (flex: 1) para que el encabezado y el pie queden fijos. Tres bloques: ¿Qué es?, ¿Por qué importa? y ¿Cómo vas?. */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: '20px', pt: '14px', pb: '16px' }}>
 
         {/* ¿Qué es? */}
@@ -212,7 +230,7 @@ export default function KpiDrawer({ open, onClose, kpiLabel, kpiValue, accentCol
 
         <Box sx={{ height: '1px', background: DL.border, mb: '14px' }} />
 
-        {/* ¿Cómo vas? */}
+        {/* La barra solo aparece si el KPI tiene benchmark; se le agrega el rango saludable calculado arriba (benchRango). */}
         <Section icon="→" color="#16a34a" bg="#dcfce7" title="¿Cómo vas?">
           {benchmark && (
             <BenchmarkBar bm={{ ...benchmark, rango: benchRango }} />

@@ -1,5 +1,13 @@
 // ─── Solicitudes de Cambios ─────────────────────────────────────────────────────
 // Pedidos a los que se les pidió un cambio. Aquí se aprueban o se rechazan.
+//
+// Qué hace: bandeja de solicitudes de cambio. Se puede filtrar por estado
+// (pestañas), por solicitante y por texto, abrir el detalle de una solicitud y,
+// si está pendiente, aprobarla o rechazarla.
+// De dónde salen los datos: data/solicitudesCambio.js (localStorage, clave
+// 'solicitudes_cambio_v2'). Cuando se aprueba, ese módulo guarda el cambio como
+// override en 'pedidos_modificados' y los pedidos lo muestran ya modificado.
+// Quién lo usa: App.jsx la monta en la ruta '/produccion/solicitudes'.
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Dialog, DialogContent, TextField, InputAdornment } from '@mui/material';
@@ -14,6 +22,7 @@ const F = "'Inter', ui-sans-serif, system-ui, sans-serif";
 const SERIF = "'Crimson Pro','Cormorant Garamond',Georgia,serif";
 const money = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Pestañas de filtro por estado; id '' significa "sin filtro" (todas)
 const TABS = [
   { id: '', label: 'Todas' },
   { id: 'Pendiente', label: 'Pendientes' },
@@ -24,6 +33,8 @@ const TABS = [
 const th = { textAlign: 'left', fontFamily: F, fontSize: 11, fontWeight: 500, color: DL.tH, padding: '10px 12px', borderBottom: `1px solid ${DL.tH}`, whiteSpace: 'nowrap', background: 'transparent' };
 const td = { fontFamily: F, fontSize: 11, color: DL.tM, padding: '12px', borderBottom: `1px dotted ${DL.border2}`, verticalAlign: 'middle' };
 
+// Botón con borde reutilizado en el diálogo de detalle. Recibe el texto (children),
+// onClick, el color del borde/texto y "disabled"; no hace nada si está deshabilitado.
 function BtnOutline({ children, onClick, color = DL.tH, disabled }) {
   return (
     <Box onClick={disabled ? undefined : onClick} sx={{
@@ -36,6 +47,10 @@ function BtnOutline({ children, onClick, color = DL.tH, disabled }) {
   );
 }
 
+// OBJETIVO: pantalla donde se revisan y resuelven las solicitudes de cambio.
+// No recibe props (lee todo de localStorage vía getSolicitudes). Devuelve la
+// tabla con filtros y el diálogo de detalle; al confirmar una aprobación o
+// rechazo provoca el cambio de estado y, si se aprueba, la modificación del pedido.
 export default function SolicitudesCambio() {
   const navigate = useNavigate();
   const [lista, setLista] = useState(() => getSolicitudes());
@@ -47,9 +62,13 @@ export default function SolicitudesCambio() {
   const [comentario, setComentario] = useState('');
   const [errorCom, setErrorCom] = useState(false);
 
+  // Opciones del filtro "Solicitante": nombres sin repetir que hay en la lista
   const solicitantes = useMemo(() => [...new Set(lista.map(s => s.solicitante))], [lista]);
+  // Cantidad por estado para el número de cada pestaña (sin estado = todas)
   const conteo = (e) => lista.filter(s => !e || s.estado === e).length;
 
+  // Filtros combinados (todos deben cumplirse): pestaña de estado, solicitante y
+  // búsqueda de texto por id de pedido, id de solicitud o nombre del cliente.
   const rows = useMemo(() => lista.filter(s => {
     const q = search.toLowerCase();
     return (!tab || s.estado === tab)
@@ -57,7 +76,13 @@ export default function SolicitudesCambio() {
       && (!q || s.pedidoId.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.cliente.toLowerCase().includes(q));
   }), [lista, tab, search, solicitante]);
 
+  // Cancela la acción en curso y limpia el comentario para la próxima vez
   const cerrarAccion = () => { setAccion(null); setComentario(''); setErrorCom(false); };
+  // Paso final del flujo: pendiente -> aprobada/rechazada.
+  // Regla: al rechazar el comentario es obligatorio (para que el solicitante sepa
+  // por qué); al aprobar es opcional. resolverSolicitud guarda el resultado y, si
+  // se aprobó, deja el cambio listo para aplicarse al pedido. Luego se refresca
+  // la lista y el detalle abierto para que muestren el nuevo estado.
   const confirmar = () => {
     if (accion === 'Rechazada' && !comentario.trim()) { setErrorCom(true); return; }
     const nueva = resolverSolicitud(detalle.id, accion, 'Administrador', comentario.trim());
@@ -98,7 +123,7 @@ export default function SolicitudesCambio() {
             ))}
           </Box>
 
-          {/* Tabla */}
+          {/* Tabla: una fila por solicitud; clic en la fila abre el detalle */}
           <Box sx={{ p: '12px' }}>
             <Box sx={{ border: `1px solid ${DL.border}`, borderRadius: '8px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
@@ -123,6 +148,8 @@ export default function SolicitudesCambio() {
                         {' → '}<span style={{ color: DL.tH, fontWeight: 500 }}>{money(s.totalDespues)}</span>
                       </td>
                       <td style={td}><EstadoSolicitud estado={s.estado} /></td>
+                      {/* stopPropagation evita que usar el menú abra también el detalle de la fila.
+                          Aprobar/Rechazar solo aparecen si la solicitud sigue pendiente. */}
                       <td style={td} onClick={e => e.stopPropagation()}>
                         <MenuAcciones opciones={[
                           { label: 'Ver detalle', onClick: () => setDetalle(s) },
@@ -142,7 +169,8 @@ export default function SolicitudesCambio() {
         </Box>
       </Box>
 
-      {/* Detalle de la solicitud */}
+      {/* Detalle de la solicitud: motivo, cambios (antes → después), total y resolución.
+          Aquí mismo se aprueba o rechaza, sin salir de la pantalla. */}
       <Dialog open={!!detalle} onClose={() => { setDetalle(null); cerrarAccion(); }} maxWidth="sm" fullWidth
         slotProps={{ paper: { sx: { borderRadius: '12px', border: `1px solid ${DL.border}` } } }}>
         {detalle && (
@@ -177,7 +205,7 @@ export default function SolicitudesCambio() {
               </Typography>
             )}
 
-            {/* Acción de resolución */}
+            {/* Acción de resolución: caja de comentario (obligatoria solo al rechazar) */}
             {detalle.estado === 'Pendiente' && accion && (
               <Box sx={{ mt: '14px' }}>
                 <Typography sx={{ fontSize: 10, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: DL.tS, fontFamily: F, mb: '6px' }}>
@@ -192,6 +220,8 @@ export default function SolicitudesCambio() {
               </Box>
             )}
 
+            {/* Botones según el estado: pendiente sin acción -> Aprobar/Rechazar;
+                pendiente con acción elegida -> Cancelar/Confirmar; ya resuelta -> solo Cerrar */}
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', mt: '20px', flexWrap: 'wrap' }}>
               <BtnOutline color={DL.tM} onClick={() => navigate('/pedidos')}>Ver registro de pedidos</BtnOutline>
               {detalle.estado === 'Pendiente' && !accion && (

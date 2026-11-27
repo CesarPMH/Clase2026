@@ -1,4 +1,9 @@
-// Component library: MUI (Box, Typography, Select, MenuItem, FormControl, Button)
+// ─── PageHeader ────────────────────────────────────────────────────────────────
+// Barra de título que se repite arriba de cada pantalla. Además del título, ofrece
+// filtros (children), botón de actualizar con tiempo de espera, botón de compartir
+// (ventana para "enviar" el dashboard por correo) y botón de descargar.
+// También exporta dos controles pequeños que usan otras pantallas: MiniSelect y ToggleGroup.
+// Librería de componentes: MUI.
 import { useState, useCallback, useEffect } from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
 import {
@@ -13,7 +18,11 @@ import {
 } from '@mui/icons-material';
 import { DL } from '../../theme';
 
-// Reusable MUI-styled mini Select
+// Objetivo: lista desplegable pequeña con la etiqueta flotando sobre el borde.
+// Props: label (etiqueta), value (valor elegido), onChange (recibe el nuevo valor, no el evento),
+// options ([{ value, label }]), minWidth, compact (versión más chica).
+// Por qué un select nativo con "appearance: none": se ve igual en todos los navegadores
+// y la flecha se dibuja aparte (chevron).
 export function MiniSelect({ label, value, onChange, options, minWidth = 110, compact = false }) {
   return (
     <Box sx={{
@@ -65,7 +74,8 @@ export function MiniSelect({ label, value, onChange, options, minWidth = 110, co
   );
 }
 
-// Toggle button group
+// Objetivo: grupo de botones donde solo uno está activo (ej. cambiar entre dos vistas).
+// Props: options ([{ value, label }]), value (el activo), onChange (recibe el valor elegido).
 export function ToggleGroup({ options, value, onChange }) {
   return (
     <Box sx={{
@@ -101,6 +111,7 @@ export function ToggleGroup({ options, value, onChange }) {
 }
 
 // ─── Share Modal ──────────────────────────────────────────────────────────────
+// Estilo común de los campos de texto del formulario de compartir.
 const inputSx = {
   fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
   fontSize: 12, fontWeight: 500, color: '#1a1a1a',
@@ -114,6 +125,7 @@ const inputSx = {
   '&::placeholder': { color: '#8d8d8d' },
 };
 
+// Objetivo: etiqueta pequeña en mayúsculas sobre cada campo del formulario. Props: children (texto).
 function FieldLabel({ children }) {
   return (
     <Typography sx={{ fontSize: 9, fontWeight: 500, textTransform: 'uppercase',
@@ -123,7 +135,13 @@ function FieldLabel({ children }) {
   );
 }
 
+// Objetivo: ventana (modal) para compartir el dashboard con una persona por correo.
+// Props: open (visible), onClose, title (nombre del dashboard, se usa en asunto, mensaje y nombre del PDF).
+// Devuelve: el modal, o null si está cerrado.
+// Nota honesta: el envío es una simulación de la interfaz (solo muestra la confirmación y cierra);
+// no se envía ningún correo ni se genera un PDF real.
 function ShareModal({ open, onClose, title }) {
+  // Se arma un nombre de archivo seguro: se quitan símbolos y los espacios pasan a guion bajo.
   const slug   = (title || 'Dashboard').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
   const label  = title || 'Dashboard';
   const fname  = `Dashboard_${slug}_Resumen.pdf`;
@@ -135,7 +153,7 @@ function ShareModal({ open, onClose, title }) {
   );
   const [sent, setSent] = useState(false);
 
-  // Reset on open
+  // Cada vez que se abre, el formulario vuelve a sus valores iniciales para no mostrar datos del envío anterior.
   useEffect(() => {
     if (open) {
       setTo('');
@@ -146,12 +164,14 @@ function ShareModal({ open, onClose, title }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Sin destinatario no se hace nada; al enviar se muestra el check 1.8 s y luego se cierra el modal.
   const handleSend = () => {
     if (!to.trim()) return;
     setSent(true);
     setTimeout(() => { setSent(false); onClose(); }, 1800);
   };
 
+  // Si está cerrado no se dibuja nada (los Hooks de arriba ya se ejecutaron, por eso este return va después).
   if (!open) return null;
 
   return (
@@ -175,7 +195,7 @@ function ShareModal({ open, onClose, title }) {
           position: 'relative',
         }}
       >
-        {/* Header */}
+        {/* Encabezado del modal con título y botón de cerrar. */}
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: '4px' }}>
           <Box>
             <Typography sx={{ fontSize: 16, fontWeight: 500, color: '#171717', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
@@ -277,8 +297,11 @@ function ShareModal({ open, onClose, title }) {
   );
 }
 
-const COOLDOWN_MS = 30 * 1000; // 30 seconds
+// Tiempo de espera de 30 segundos (referencia para pantallas que limiten cuántas veces se actualiza).
 
+const COOLDOWN_MS = 30 * 1000; // 30 seconds (sin uso actualmente)
+
+// Objetivo: devolver la fecha y hora actuales como texto "dd/mm/aaaa hh:mm a. m. (CST)". Por qué: formato en 12 horas, como se usa en la empresa.
 function fmtNow() {
   const now = new Date();
   const day   = String(now.getDate()).padStart(2, '0');
@@ -291,14 +314,20 @@ function fmtNow() {
   return `${day}/${month}/${year} ${String(hrs).padStart(2, '0')}:${mins} ${ampm} (CST)`;
 }
 
+// Objetivo: convertir milisegundos restantes en "mm:ss" para el aviso del botón de actualizar.
 function fmtCooldown(ms) {
   const s = Math.ceil(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// Objetivo: encabezado fijo (sticky) de una pantalla.
+// Props: title (título), live (reservado, hoy no se usa), onBack (si existe, muestra el botón de volver),
+// children (filtros u otros controles), onRefresh / refreshDisabled / refreshCooldown (botón de actualizar
+// y milisegundos restantes de espera), showShare (muestra "Compartir"), onExport (si existe, muestra "Descargar").
+// Devuelve: la barra con título a la izquierda y controles a la derecha.
 export default function PageHeader({
   title, live = true, onBack, children,
-  // Refresh props — if onRefresh provided, Refresh button is shown
+  // Props del botón de actualizar: solo aparece si se pasa onRefresh.
   onRefresh,
   refreshDisabled = false,
   refreshCooldown = 0,  // remaining ms for cooldown display
@@ -306,16 +335,17 @@ export default function PageHeader({
   showShare = true,
   onExport,
 }) {
+  // liveTs guarda la hora de la última actualización (hoy se actualiza pero no se muestra en pantalla).
   const [liveTs,     setLiveTs]     = useState(fmtNow);
   const [shareOpen,  setShareOpen]  = useState(false);
 
-  // Update timestamp every minute
+  // Se refresca la hora cada minuto; el return limpia el intervalo cuando el componente se desmonta.
   useEffect(() => {
     const id = setInterval(() => setLiveTs(fmtNow()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // When onRefresh fires, update the timestamp
+  // Al actualizar, se ejecuta la función del padre y se renueva la hora; useCallback evita recrear la función en cada render.
   const handleRefresh = useCallback(() => {
     if (onRefresh) {
       onRefresh();
@@ -323,6 +353,7 @@ export default function PageHeader({
     }
   }, [onRefresh]);
 
+  // showRightBar evita dibujar una zona derecha vacía; isDisabled bloquea el botón por estar deshabilitado o en espera.
   const showRightBar = children || onRefresh || showShare || onExport;
   const isDisabled = refreshDisabled || refreshCooldown > 0;
 
@@ -343,7 +374,7 @@ export default function PageHeader({
       flexShrink: 0,
     }}>
 
-      {/* Top row: back button + title */}
+      {/* Fila superior: botón de volver (opcional) + título. En celular los controles bajan a otra fila. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', width: { xs: '100%', md: 'auto' } }}>
         {onBack && (
           <IconButton size="small" onClick={onBack} sx={{
@@ -364,7 +395,7 @@ export default function PageHeader({
         </Box>
       </Box>
 
-      {/* Right: filters + Refresh + Compartir */}
+      {/* Zona derecha: filtros (children) y botones. Los botones aparecen según las props recibidas. */}
       {showRightBar && (
         <Box sx={{
           flex: 1,
@@ -435,7 +466,7 @@ export default function PageHeader({
         </Box>
       )}
 
-      {/* Share modal — rendered at page-header level so it overlays everything */}
+      {/* El modal se dibuja aquí, dentro del encabezado, para que cubra toda la pantalla (position fixed). */}
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} title={title} />
     </Box>
   );

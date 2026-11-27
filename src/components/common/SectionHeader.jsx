@@ -1,11 +1,19 @@
+// ─── SectionHeader ─────────────────────────────────────────────────────────────
+// Encabezado pequeño que separa las secciones de un dashboard: una barrita de color,
+// el título en mayúsculas y, a la derecha, un subtítulo y controles opcionales.
+// Librería de componentes: MUI (Box, Typography).
 // Component library: MUI (Box, Typography)
 import { Box, Typography } from '@mui/material';
 import { DL } from '../../theme';
 
+// Objetivo: rotular una sección de la pantalla.
+// Props: title (texto principal), subtitle (aclaración en cursiva, opcional),
+// children (controles extra como filtros o botones, opcionales).
+// Devuelve: una fila con el título a la izquierda y subtítulo/controles a la derecha.
 export default function SectionHeader({ title, subtitle, children }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '8px', gap: '12px' }}>
-      {/* Left: accent bar + title */}
+      {/* Lado izquierdo: barra de acento + título. flexShrink 0 evita que el título se aplaste cuando el lado derecho es largo. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         <Box sx={{
           width: 14, height: 3, borderRadius: 2,
@@ -21,7 +29,7 @@ export default function SectionHeader({ title, subtitle, children }) {
         </Typography>
       </Box>
 
-      {/* Right: subtitle (italic) + optional children */}
+      {/* Lado derecho: el subtítulo se corta con "..." (ellipsis) si no cabe, así no rompe la fila. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
         {subtitle && (
           <Typography sx={{

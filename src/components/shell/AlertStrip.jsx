@@ -1,7 +1,15 @@
+// ─── AlertStrip ────────────────────────────────────────────────────────────────
+// Franja delgada con alertas en forma de "pastillas" de colores (rojo, amarillo, verde)
+// que se desplazan en horizontal. Sirve para ver de un vistazo lo urgente del dashboard.
+// Nota honesta: los textos de ALERTS están escritos a mano como datos de demostración
+// (no se calculan a partir de pedidos ni de ventas reales). Además, por ahora este componente
+// no se importa desde ninguna pantalla; queda disponible como pieza reutilizable.
+// Librería de componentes: MUI (Box, Typography, Chip).
 // Component library: MUI (Box, Typography, Chip)
 import { Box, Typography, Chip } from '@mui/material';
 import { DL } from '../../theme';
 
+// Alertas de demostración. type: r = crítica, y = advertencia, g = positiva.
 const ALERTS = [
   { type: 'r', text: 'Margen bruto 18.1% — por debajo del umbral mín. 25%' },
   { type: 'y', text: 'E-Commerce cayó 17% vs. período anterior' },
@@ -10,12 +18,15 @@ const ALERTS = [
   { type: 'g', text: 'Clientes activos: 127 (+16.5% YoY)' },
 ];
 
+// Colores por tipo de alerta tomados del tema (DL), para que coincidan con el resto de la aplicación.
 const COLOR_MAP = {
   r: { bg: DL.redBg,    color: DL.red,    dot: DL.red,    border: DL.redBd },
   y: { bg: DL.yellowBg, color: DL.yellow, dot: DL.yellow, border: DL.yellowBd },
   g: { bg: DL.greenBg,  color: DL.green,  dot: DL.green,  border: DL.greenBd },
 };
 
+// Objetivo: mostrar la franja de alertas. No recibe props. Devuelve: una barra de 34 px con la etiqueta
+// "Alertas" y las pastillas.
 export default function AlertStrip() {
   return (
     <Box sx={{
@@ -42,6 +53,7 @@ export default function AlertStrip() {
         '&::-webkit-scrollbar': { display: 'none' },
         scrollbarWidth: 'none',
       }}>
+        {/* Cada alerta se dibuja con los colores de su tipo; la franja hace scroll horizontal (sin barra visible) cuando no caben todas. */}
         {ALERTS.map((alert, i) => {
           const c = COLOR_MAP[alert.type];
           return (

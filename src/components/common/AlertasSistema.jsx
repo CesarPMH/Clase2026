@@ -1,6 +1,9 @@
-// ─── AlertasSistema — shared compact alerts card ───────────────────────────────
-// Usage: <AlertasSistema alerts={[{ tier:'r'|'y'|'o'|'g', msg:'...' }]} />
-//   tier:  r = critical (red) · y = warning (yellow) · o = info (orange) · g = success (green)
+// ─── AlertasSistema ────────────────────────────────────────────────────────────
+// Tarjeta compacta que lista las alertas de un dashboard, con un filtro por gravedad
+// (todas, críticas, atención, positivas). Se comparte entre varias pantallas para que
+// las alertas se vean igual en todas; la usa quien monitorea los indicadores.
+// Uso: <AlertasSistema alerts={[{ tier:'r'|'y'|'o'|'g', msg:'...' }]} />
+//   tier:  r = crítica (rojo) · y = advertencia (amarillo) · o = info (naranja) · g = positiva (verde)
 
 import { useState } from 'react';
 import { Box, Typography } from '@mui/material';
@@ -9,6 +12,7 @@ import { MiniSelect } from './PageHeader';
 
 const FF = "'Inter', ui-sans-serif, system-ui, sans-serif";
 
+// Estilo de cada nivel de alerta (fondo, borde, círculo del ícono y símbolo). Si llega un tier desconocido se usa el verde (ver TIER.g más abajo).
 const TIER = {
   r: { bg: '#fff1f0', border: DL.red,    iconBg: '#fee2e2', iconColor: DL.red,    iconBd: '#fca5a5', icon: '!' },
   y: { bg: '#fffbeb', border: '#d97706', iconBg: '#fef3c7', iconColor: '#d97706', iconBd: '#fcd34d', icon: '⚠' },
@@ -16,6 +20,7 @@ const TIER = {
   g: { bg: '#f0fdf4', border: DL.green,  iconBg: '#dcfce7', iconColor: DL.green,  iconBd: '#86efac', icon: '✓' },
 };
 
+// Estilo para un select nativo pequeño. Nota: quedó definido, pero hoy el filtro usa MiniSelect (que trae su propio estilo).
 const selectSx = {
   fontSize: 10, fontWeight: 500, color: '#3f3f3f',
   border: `1px solid ${DL.border2}`, borderRadius: '6px',
@@ -25,9 +30,16 @@ const selectSx = {
   '&:focus': { borderColor: DL.blue },
 };
 
+// Objetivo: mostrar la lista de alertas con su filtro.
+// Props: alerts (arreglo de { tier, msg }), title (título de la tarjeta),
+// maxHeight (alto máximo opcional; si se pasa, la lista hace scroll dentro).
+// Devuelve: la tarjeta con encabezado, filtro y filas.
 export default function AlertasSistema({ alerts = [], title = 'Alertas de Sistema', maxHeight }) {
+  // filter guarda la opción elegida en el select; arranca en "todos".
   const [filter, setFilter] = useState('todos');
 
+  // Filtrado de las alertas: "Atención" junta las amarillas (y) y las naranjas (o), porque ambas
+  // significan lo mismo para el usuario: algo por revisar pero no crítico.
   const shown = filter === 'todos' ? alerts
     : filter === 'r' ? alerts.filter(a => a.tier === 'r')
     : filter === 'y' ? alerts.filter(a => a.tier === 'y' || a.tier === 'o')
@@ -59,7 +71,8 @@ export default function AlertasSistema({ alerts = [], title = 'Alertas de Sistem
           options={[{ value: 'todos', label: 'Todos' }, { value: 'r', label: 'Críticas' }, { value: 'y', label: 'Atención' }, { value: 'g', label: 'Positivas' }]} />
       </Box>
 
-      {/* Rows */}
+      {/* Filas. Lista con scroll propio: el encabezado no se mueve y solo las filas
+          se desplazan cuando hay muchas. */}
       <Box sx={{ p: '6px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto' }}>
         {shown.length === 0 && (
           <Typography sx={{ fontSize: 9, color: DL.tS, fontFamily: FF, textAlign: 'center', py: '10px' }}>
